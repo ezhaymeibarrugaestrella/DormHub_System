@@ -1,0 +1,61 @@
+/* Prevent iOS zoom on input focus */
+@media (max-width: 576px) {
+  input, select, textarea, .form-control, .form-select, .input-group-text {
+    font-size: 16px !important;
+  }
+}
+
+/* Responsive map containers */
+.map-container { height: 180px; }
+.map-modal-container { height: 400px; }
+@media (max-width: 576px) {
+  .map-container { height: 140px; }
+  .map-modal-container { height: 280px; }
+}
+@media (min-width: 768px) {
+  .map-container { height: 220px; }
+}
+
+/* Step indicator scrollable */
+.step-indicator {
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.step-indicator::-webkit-scrollbar { display: none; }
+
+/* Card border radius consistency */
+.card { border-radius: 14px !important; }
+
+/* Smooth hover for stat cards */
+.stat-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+
+/* Sidebar width responsive */
+@media (max-width: 450px) {
+  .sidebar-mobile { width: 220px !important; }
+}
+@media (max-width: 360px) {
+  .sidebar-mobile { width: 180px !important; }
+}
+
+/* Login background decoration */
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: -50%; right: -50%;
+  width: 100%; height: 100%;
+  background: radial-gradient(circle, rgba(13,110,253,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Modal spacing on small screens */
+@media (max-width: 576px) {
+  .modal-dialog { margin: 0.5rem; }
+}
+
+/* Consistent card hover shadow */
+.card.shadow-sm { transition: box-shadow 0.2s ease; }
+
+/* Table wrapper */
+.table-responsive { -webkit-overflow-scrolling: touch; }
