@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: dormhub
+    runtime: docker
+    repo: https://github.com/kugtong/DORM_HUB
+    plan: free
+    region: singapore
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: RP_ID
+        value: dormhub.onrender.com
+      - key: RP_ORIGIN
+        value: https://dormhub.onrender.com

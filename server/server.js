@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
+const path = require("path");
 
 const { Server } = require("socket.io");
 
@@ -42,6 +43,15 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/face-auth", faceAuthRoutes);
 app.use("/api/users", userRoutes);
+
+app.use((req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) {
+        return next();
+    }
+    res.sendFile(path.join(__dirname, "public", "index.html"), (err) => {
+        if (err) next();
+    });
+});
 
 const server = http.createServer(app);
 
