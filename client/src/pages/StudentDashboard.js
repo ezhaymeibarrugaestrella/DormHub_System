@@ -20,7 +20,8 @@ import {
     FaMapMarkedAlt,
     FaCamera,
     FaFingerprint,
-    FaMoon
+    FaMoon,
+    FaExclamationCircle
 } from "react-icons/fa";
 import FaceCamera from "../components/FaceCamera";
 import {
@@ -46,6 +47,7 @@ function StudentDashboard() {
     const [nightlyCheckedIn, setNightlyCheckedIn] = useState(false);
     const [nightlyCheckedAt, setNightlyCheckedAt] = useState(null);
     const [nightlyLoading, setNightlyLoading] = useState(false);
+    const [demeritSummary, setDemeritSummary] = useState(null);
 
     useEffect(() => {
         const userData = JSON.parse(localStorage.getItem("user") || "{}");
@@ -55,6 +57,7 @@ function StudentDashboard() {
         fetchRequests();
         checkWebAuthnSupport();
         fetchNightlyStatus();
+        fetchDemeritSummary();
     }, []);
 
     const checkWebAuthnSupport = async () => {
@@ -71,6 +74,15 @@ function StudentDashboard() {
             const res = await API.get("/attendance/nightly/status");
             setNightlyCheckedIn(res.data.checkedIn);
             setNightlyCheckedAt(res.data.checkedAt);
+        } catch (err) {
+            console.log(err);
+        }
+    };
+
+    const fetchDemeritSummary = async () => {
+        try {
+            const res = await API.get("/demerits/my/summary");
+            setDemeritSummary(res.data);
         } catch (err) {
             console.log(err);
         }
@@ -515,6 +527,32 @@ function StudentDashboard() {
                                         )}
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card border-0 shadow-sm mb-4 stat-card" style={{ cursor: "pointer" }}
+                    onClick={() => window.location.href = "/student-demerits"}>
+                    <div className="card-body p-3 p-md-4">
+                        <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center gap-3">
+                                <div className="bg-danger bg-opacity-10 p-3 rounded-circle">
+                                    <FaExclamationCircle size={20} className="text-danger" />
+                                </div>
+                                <div>
+                                    <h6 className="fw-bold mb-0">My Demerits</h6>
+                                    <small className="text-muted">View your demerit records and points</small>
+                                </div>
+                            </div>
+                            <div className="d-flex align-items-center gap-3">
+                                {demeritSummary && (
+                                    <div className="text-end d-none d-sm-block">
+                                        <span className="badge bg-danger me-2">{demeritSummary.total_demerits} demerits</span>
+                                        <span className="badge bg-primary">{demeritSummary.total_points} pts</span>
+                                    </div>
+                                )}
+                                <i className="bi bi-chevron-right text-muted"></i>
                             </div>
                         </div>
                     </div>

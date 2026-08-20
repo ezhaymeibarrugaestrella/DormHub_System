@@ -63,6 +63,55 @@ exports.getSummary = async (req, res) => {
     }
 };
 
+exports.getMySummary = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const results = await Demerit.aggregate([
+            { $match: { user_id: new (require("mongoose").Types.ObjectId)(userId) } },
+            {
+                $group: {
+                    _id: "$user_id",
+                    total_demerits: { $sum: 1 },
+                    total_points: { $sum: "$points" },
+                    latest_date: { $max: "$created_at" }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    total_demerits: 1,
+                    total_points: 1,
+                    latest_date: 1
+                }
+            }
+        ]);
+
+        if (results.length === 0) {
+            return res.json({
+                total_demerits: 0,
+                total_points: 0,
+                latest_date: null,
+                status: "Good Standing"
+            });
+        }
+
+        const summary = results[0];
+        let status = "Good Standing";
+        if (summary.total_demerits >= 7) {
+            status = "Critical";
+        } else if (summary.total_demerits >= 4) {
+            status = "High Risk";
+        } else if (summary.total_demerits >= 1) {
+            status = "Warning";
+        }
+
+        res.json({ ...summary, status });
+    } catch (error) {
+        res.status(500).json(error);
+    }
+};
+
 exports.create = async (req, res) => {
     try {
         const { user_id, violation, points } = req.body;
