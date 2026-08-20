@@ -2,7 +2,7 @@ services:
   - type: web
     name: dormhub
     runtime: docker
-    repo: https://github.com/kugtong/DORM_HUB
+    repo: https://github.com/ezhaymeibarrugaestrella/DormHub_System
     plan: free
     region: singapore
     healthCheckPath: /
