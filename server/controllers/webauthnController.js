@@ -1,5 +1,4 @@
-const User = require("../models/User");
-const WebauthnCredential = require("../models/WebauthnCredential");
+const db = require("../config/db");
 const {
     generateRegistrationOptions,
     verifyRegistrationResponse,
@@ -21,41 +20,45 @@ const getOrigins = (req) => {
 
 const challenges = {};
 
-exports.getStatus = async (req, res) => {
-    try {
-        const count = await WebauthnCredential.countDocuments({ user_id: req.user.id });
-        res.json({ registered: count > 0, fingerprint_registered: count > 0 });
-    } catch (error) {
-        res.status(500).json(error);
-    }
+exports.getStatus = (req, res) => {
+    db.query(
+        "SELECT COUNT(*) AS count FROM webauthn_credentials WHERE user_id = ?",
+        [req.user.id],
+        (err, result) => {
+            if (err) return res.status(500).json(err);
+            res.json({ registered: result[0].count > 0, fingerprint_registered: result[0].count > 0 });
+        }
+    );
 };
 
 exports.beginRegistration = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const user = await User.findById(userId);
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        const options = await generateRegistrationOptions({
-            rpName: "DormHub",
-            rpID,
-            userName: user.email,
-            userDisplayName: user.fullname,
-            attestationType: "none",
-            authenticatorSelection: {
-                authenticatorAttachment: "platform",
-                userVerification: "required",
-                residentKey: "discouraged"
+        db.query("SELECT * FROM users WHERE id = ?", [userId], async (err, users) => {
+            if (err || users.length === 0) {
+                return res.status(404).json({ message: "User not found" });
             }
+
+            const user = users[0];
+
+            const options = await generateRegistrationOptions({
+                rpName: "DormHub",
+                rpID,
+                userName: user.email,
+                userDisplayName: user.fullname,
+                attestationType: "none",
+                authenticatorSelection: {
+                    authenticatorAttachment: "platform",
+                    userVerification: "required",
+                    residentKey: "discouraged"
+                }
+            });
+
+            challenges[`register_${userId}`] = options.challenge;
+
+            res.json(options);
         });
-
-        challenges[`register_${userId}`] = options.challenge;
-
-        res.json(options);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Failed to generate registration options" });
@@ -87,57 +90,79 @@ exports.completeRegistration = async (req, res) => {
 
         const { credential: credInfo } = verification.registrationInfo;
 
-        const existing = await WebauthnCredential.findOne({ credential_id: credInfo.id });
-        if (existing) {
-            return res.status(400).json({ message: "Credential already registered" });
-        }
+        db.query(
+            "SELECT id FROM webauthn_credentials WHERE credential_id = ?",
+            [credInfo.id],
+            (err, existing) => {
+                if (err) return res.status(500).json(err);
+                if (existing.length > 0) {
+                    return res.status(400).json({ message: "Credential already registered" });
+                }
 
-        await WebauthnCredential.create({
-            user_id: userId,
-            credential_id: credInfo.id,
-            public_key: Buffer.from(credInfo.publicKey).toString("base64"),
-            counter: credInfo.counter,
-            transports: JSON.stringify(credInfo.transports || [])
-        });
+                db.query(
+                    `INSERT INTO webauthn_credentials 
+                    (user_id, credential_id, public_key, counter, transports) 
+                    VALUES (?, ?, ?, ?, ?)`,
+                    [
+                        userId,
+                        credInfo.id,
+                        Buffer.from(credInfo.publicKey).toString("base64"),
+                        credInfo.counter,
+                        JSON.stringify(credInfo.transports || [])
+                    ],
+                    (err) => {
+                        if (err) return res.status(500).json(err);
 
-        await User.findByIdAndUpdate(userId, { fingerprint_registered: true });
+                        db.query(
+                            "UPDATE users SET fingerprint_registered = 1 WHERE id = ?",
+                            [userId]
+                        );
 
-        delete challenges[`register_${userId}`];
+                        delete challenges[`register_${userId}`];
 
-        res.json({ message: "Biometric registered successfully" });
+                        res.json({ message: "Biometric registered successfully" });
+                    }
+                );
+            }
+        );
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Registration failed", error: error.message });
     }
 };
 
-exports.beginAuthentication = async (req, res) => {
-    try {
-        const userId = req.user.id;
+exports.beginAuthentication = (req, res) => {
+    const userId = req.user.id;
 
-        const credentials = await WebauthnCredential.find({ user_id: userId });
+    db.query(
+        "SELECT * FROM webauthn_credentials WHERE user_id = ?",
+        [userId],
+        async (err, credentials) => {
+            if (err) return res.status(500).json(err);
+            if (credentials.length === 0) {
+                return res.status(400).json({ message: "No biometric registered" });
+            }
 
-        if (credentials.length === 0) {
-            return res.status(400).json({ message: "No biometric registered" });
+            try {
+                const options = await generateAuthenticationOptions({
+                    rpID,
+                    userVerification: "required",
+                    allowCredentials: credentials.map(c => ({
+                        id: c.credential_id,
+                        type: "public-key",
+                        transports: JSON.parse(c.transports || "[]")
+                    }))
+                });
+
+                challenges[`auth_${userId}`] = options.challenge;
+
+                res.json(options);
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ message: "Failed to generate authentication options" });
+            }
         }
-
-        const options = await generateAuthenticationOptions({
-            rpID,
-            userVerification: "required",
-            allowCredentials: credentials.map(c => ({
-                id: c.credential_id,
-                type: "public-key",
-                transports: JSON.parse(c.transports || "[]")
-            }))
-        });
-
-        challenges[`auth_${userId}`] = options.challenge;
-
-        res.json(options);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Failed to generate authentication options" });
-    }
+    );
 };
 
 exports.completeAuthentication = async (req, res) => {
@@ -151,45 +176,50 @@ exports.completeAuthentication = async (req, res) => {
             return res.status(400).json({ message: "No authentication in progress" });
         }
 
-        const storedCred = await WebauthnCredential.findOne({
-            user_id: userId,
-            credential_id: assertion.id
-        });
+        db.query(
+            "SELECT * FROM webauthn_credentials WHERE user_id = ? AND credential_id = ?",
+            [userId, assertion.id],
+            async (err, credentials) => {
+                if (err) return res.status(500).json(err);
+                if (credentials.length === 0) {
+                    return res.status(401).json({ message: "Credential not found", verified: false });
+                }
 
-        if (!storedCred) {
-            return res.status(401).json({ message: "Credential not found", verified: false });
-        }
+                const storedCred = credentials[0];
 
-        try {
-            const verification = await verifyAuthenticationResponse({
-                response: assertion,
-                expectedChallenge,
-                expectedOrigin: getOrigins(req),
-                expectedRPID: rpID,
-                credential: {
-                    id: storedCred.credential_id,
-                    publicKey: Buffer.from(storedCred.public_key, "base64"),
-                    counter: storedCred.counter,
-                    transports: JSON.parse(storedCred.transports || "[]")
-                },
-                requireUserVerification: true
-            });
+                try {
+                    const verification = await verifyAuthenticationResponse({
+                        response: assertion,
+                        expectedChallenge,
+                        expectedOrigin: getOrigins(req),
+                        expectedRPID: rpID,
+                        credential: {
+                            id: storedCred.credential_id,
+                            publicKey: Buffer.from(storedCred.public_key, "base64"),
+                            counter: storedCred.counter,
+                            transports: JSON.parse(storedCred.transports || "[]")
+                        },
+                        requireUserVerification: true
+                    });
 
-            if (!verification.verified) {
-                return res.status(401).json({ message: "Biometric verification failed", verified: false });
+                    if (!verification.verified) {
+                        return res.status(401).json({ message: "Biometric verification failed", verified: false });
+                    }
+
+                    db.query(
+                        "UPDATE webauthn_credentials SET counter = ? WHERE id = ?",
+                        [verification.authenticationInfo.newCounter, storedCred.id]
+                    );
+
+                    delete challenges[`auth_${userId}`];
+
+                    res.json({ message: "Biometric verified", verified: true, credentialId: assertion.id });
+                } catch (error) {
+                    console.error(error);
+                    res.status(401).json({ message: "Biometric verification failed", verified: false });
+                }
             }
-
-            await WebauthnCredential.findByIdAndUpdate(storedCred._id, {
-                counter: verification.authenticationInfo.newCounter
-            });
-
-            delete challenges[`auth_${userId}`];
-
-            res.json({ message: "Biometric verified", verified: true, credentialId: assertion.id });
-        } catch (error) {
-            console.error(error);
-            res.status(401).json({ message: "Biometric verification failed", verified: false });
-        }
+        );
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Authentication failed" });

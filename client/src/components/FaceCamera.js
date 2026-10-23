@@ -11,9 +11,7 @@ import {
 
 const MODEL_URL = process.env.REACT_APP_API_URL
     ? `${process.env.REACT_APP_API_URL}/models`
-    : process.env.NODE_ENV === "production"
-        ? "/models"
-        : `http://${window.location.hostname}:5000/models`;
+    : `http://${window.location.hostname}:5000/models`;
 
 function FaceCamera({ mode, onSuccess, onError }) {
     const videoRef = useRef(null);

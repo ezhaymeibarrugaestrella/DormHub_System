@@ -66,7 +66,12 @@ function Sidebar({ mode, theme, onToggle, mobileOpen }) {
         { name: "Settings", icon: <FaCog />, path: "/settings" }
     ];
 
-    const menu = adminMenu;
+    const studentMenu = [
+        { name: "Dashboard", icon: <FaTachometerAlt />, path: "/student-dashboard" },
+        { name: "Gate Pass", icon: <FaDoorOpen />, path: "/student-dashboard" }
+    ];
+
+    const menu = isAdmin ? adminMenu : studentMenu;
 
     const sidebarBg = isLightMode ? "#f0f2f5" : "#081028";
     const sidebarText = isLightMode ? "#212529" : "#fff";

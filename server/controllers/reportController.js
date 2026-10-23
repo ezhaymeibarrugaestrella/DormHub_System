@@ -1,284 +1,147 @@
-const AttendanceLog = require("../models/AttendanceLog");
-const Demerit = require("../models/Demerit");
-const GateRequest = require("../models/GateRequest");
-const User = require("../models/User");
-const { serializeAttendanceLog, serializeDemerit, serializeGateRequest } = require("../utils/serialize");
+const db = require("../config/db");
 
-function dateRangeFilter(start, end) {
-    if (!start || !end) return {};
-    return {
-        created_at: {
-            $gte: new Date(`${start}T00:00:00.000Z`),
-            $lte: new Date(`${end}T23:59:59.999Z`)
-        }
-    };
-}
+exports.getAttendanceReport = (req, res) => {
+    const { start, end } = req.query;
+    let sql = `
+        SELECT a.*, u.fullname, u.student_id, u.program, u.year_section
+        FROM attendance_logs a
+        JOIN users u ON a.user_id = u.id
+    `;
+    const params = [];
 
-exports.getAttendanceReport = async (req, res) => {
-    try {
-        const { start, end } = req.query;
-        const filter = dateRangeFilter(start, end);
-
-        const results = await AttendanceLog.find(filter)
-            .populate("user_id", "fullname student_id program year_section")
-            .sort({ created_at: -1 });
-
-        res.json(results.map(serializeAttendanceLog));
-    } catch (error) {
-        res.status(500).json(error);
+    if (start && end) {
+        sql += " WHERE DATE(a.created_at) BETWEEN ? AND ?";
+        params.push(start, end);
     }
+
+    sql += " ORDER BY a.created_at DESC";
+
+    db.query(sql, params, (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
 };
 
-exports.getDemeritReport = async (req, res) => {
-    try {
-        const { start, end } = req.query;
-        const filter = dateRangeFilter(start, end);
+exports.getDemeritReport = (req, res) => {
+    const { start, end } = req.query;
+    let sql = `
+        SELECT d.*, u.fullname, u.student_id, u.program
+        FROM demerits d
+        JOIN users u ON d.user_id = u.id
+    `;
+    const params = [];
 
-        const results = await Demerit.find(filter)
-            .populate("user_id", "fullname student_id program")
-            .sort({ created_at: -1 });
-
-        res.json(results.map(serializeDemerit));
-    } catch (error) {
-        res.status(500).json(error);
+    if (start && end) {
+        sql += " WHERE DATE(d.created_at) BETWEEN ? AND ?";
+        params.push(start, end);
     }
+
+    sql += " ORDER BY d.created_at DESC";
+
+    db.query(sql, params, (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
 };
 
-exports.getGateRequestReport = async (req, res) => {
-    try {
-        const { start, end, status } = req.query;
-        const filter = dateRangeFilter(start, end);
+exports.getGateRequestReport = (req, res) => {
+    const { start, end, status } = req.query;
+    let sql = `
+        SELECT gr.*, u.fullname, u.student_id, u.room_number
+        FROM gate_requests gr
+        JOIN users u ON gr.user_id = u.id
+        WHERE 1=1
+    `;
+    const params = [];
 
-        if (status) {
-            filter.status = status;
-        }
-
-        const results = await GateRequest.find(filter)
-            .populate("user_id", "fullname student_id room_number")
-            .sort({ created_at: -1 });
-
-        res.json(results.map(serializeGateRequest));
-    } catch (error) {
-        res.status(500).json(error);
+    if (start && end) {
+        sql += " AND DATE(gr.created_at) BETWEEN ? AND ?";
+        params.push(start, end);
     }
+
+    if (status) {
+        sql += " AND gr.status = ?";
+        params.push(status);
+    }
+
+    sql += " ORDER BY gr.created_at DESC";
+
+    db.query(sql, params, (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
 };
 
-exports.getReportSummary = async (req, res) => {
-    try {
-        const { start, end } = req.query;
-        const filter = dateRangeFilter(start, end);
+exports.getReportSummary = (req, res) => {
+    const { start, end } = req.query;
+    const dateFilter = (start && end) ? " WHERE DATE(created_at) BETWEEN ? AND ?" : "";
+    const params = (start && end) ? [start, end] : [];
 
-        const [totalAttendance, totalDemerits, totalGateRequests, pendingRequests, approvedRequests] =
-            await Promise.all([
-                AttendanceLog.countDocuments(filter),
-                Demerit.countDocuments(filter),
-                GateRequest.countDocuments(filter),
-                GateRequest.countDocuments({ ...filter, status: "pending" }),
-                GateRequest.countDocuments({ ...filter, status: "approved" })
-            ]);
+    const queries = [
+        db.promise().query(`SELECT COUNT(*) AS total FROM attendance_logs${dateFilter}`, params),
+        db.promise().query(`SELECT COUNT(*) AS total FROM demerits${dateFilter}`, params),
+        db.promise().query(`SELECT COUNT(*) AS total FROM gate_requests${dateFilter}`, params),
+        db.promise().query(`SELECT COUNT(*) AS pending FROM gate_requests${dateFilter ? dateFilter + " AND status='pending'" : " WHERE status='pending'"}`, params),
+        db.promise().query(`SELECT COUNT(*) AS approved FROM gate_requests${dateFilter ? dateFilter + " AND status='approved'" : " WHERE status='approved'"}`, params),
+    ];
 
-        res.json({
-            totalAttendance,
-            totalDemerits,
-            totalGateRequests,
-            pendingRequests,
-            approvedRequests
+    Promise.all(queries.map(q => q.catch(() => [{ total: 0 }])))
+        .then(([attendance, demerits, gateRequests, pending, approved]) => {
+            res.json({
+                totalAttendance: attendance[0][0]?.total || 0,
+                totalDemerits: demerits[0][0]?.total || 0,
+                totalGateRequests: gateRequests[0][0]?.total || 0,
+                pendingRequests: pending[0][0]?.pending || 0,
+                approvedRequests: approved[0][0]?.approved || 0
+            });
+        })
+        .catch((err) => {
+            console.error(err);
+            res.status(500).json(err);
         });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json(error);
-    }
 };
 
-exports.getMonthlyReport = async (req, res) => {
-    try {
-        const { month } = req.query;
+exports.getMonthlyReport = (req, res) => {
+    const { month } = req.query;
+    if (!month) {
+        return res.status(400).json({ error: "Month parameter required (YYYY-MM)" });
+    }
 
-        if (!month) {
-            return res.status(400).json({ error: "Month parameter required (YYYY-MM)" });
+    const sql = `
+        SELECT
+            u.id,
+            u.fullname,
+            u.student_id,
+            u.program,
+            u.year_section,
+            u.room_number,
+            (SELECT COALESCE(SUM(points), 0) FROM demerits WHERE user_id = u.id AND DATE_FORMAT(created_at, '%Y-%m') = ?) AS total_demerit_points,
+            (SELECT COUNT(*) FROM gate_requests WHERE user_id = u.id AND request_type = 'out' AND status = 'approved' AND DATE_FORMAT(created_at, '%Y-%m') = ?) AS total_going_out,
+            (SELECT COUNT(*) FROM gate_requests WHERE user_id = u.id AND request_type = 'in' AND status = 'approved' AND DATE_FORMAT(created_at, '%Y-%m') = ?) AS total_coming_in
+        FROM users u
+        WHERE u.role = 'student'
+        ORDER BY u.fullname
+    `;
+
+    db.query(sql, [month, month, month], (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+};
+
+exports.getStudentReport = (req, res) => {
+    db.query(
+        `SELECT u.id, u.fullname, u.student_id, u.program, u.year_section, u.room_number,
+                (SELECT COUNT(*) FROM attendance_logs WHERE user_id = u.id) AS total_attendance,
+                (SELECT COUNT(*) FROM demerits WHERE user_id = u.id) AS total_demerits,
+                (SELECT COALESCE(SUM(points), 0) FROM demerits WHERE user_id = u.id) AS total_points,
+                (SELECT COUNT(*) FROM gate_requests WHERE user_id = u.id) AS total_gate_requests
+         FROM users u
+         WHERE u.role = 'student'
+         ORDER BY u.fullname`,
+        (err, results) => {
+            if (err) return res.status(500).json(err);
+            res.json(results);
         }
-
-        const results = await User.aggregate([
-            { $match: { role: "student" } },
-            {
-                $lookup: {
-                    from: "demerits",
-                    localField: "_id",
-                    foreignField: "user_id",
-                    as: "demerits"
-                }
-            },
-            {
-                $lookup: {
-                    from: "gate_requests",
-                    localField: "_id",
-                    foreignField: "user_id",
-                    as: "gate_requests"
-                }
-            },
-            {
-                $project: {
-                    fullname: 1,
-                    student_id: 1,
-                    program: 1,
-                    year_section: 1,
-                    room_number: 1,
-                    total_demerit_points: {
-                        $reduce: {
-                            input: {
-                                $filter: {
-                                    input: "$demerits",
-                                    as: "d",
-                                    cond: {
-                                        $regexMatch: {
-                                            input: {
-                                                $dateToString: { format: "%Y-%m", date: "$$d.created_at" }
-                                            },
-                                            regex: month
-                                        }
-                                    }
-                                }
-                            },
-                            initialValue: 0,
-                            in: { $add: ["$$value", { $ifNull: ["$$this.points", 0] }] }
-                        }
-                    },
-                    total_going_out: {
-                        $size: {
-                            $filter: {
-                                input: "$gate_requests",
-                                as: "g",
-                                cond: {
-                                    $and: [
-                                        { $eq: ["$$g.request_type", "out"] },
-                                        { $eq: ["$$g.status", "approved"] },
-                                        {
-                                            $regexMatch: {
-                                                input: {
-                                                    $dateToString: { format: "%Y-%m", date: "$$g.created_at" }
-                                                },
-                                                regex: month
-                                            }
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    total_coming_in: {
-                        $size: {
-                            $filter: {
-                                input: "$gate_requests",
-                                as: "g",
-                                cond: {
-                                    $and: [
-                                        { $eq: ["$$g.request_type", "in"] },
-                                        { $eq: ["$$g.status", "approved"] },
-                                        {
-                                            $regexMatch: {
-                                                input: {
-                                                    $dateToString: { format: "%Y-%m", date: "$$g.created_at" }
-                                                },
-                                                regex: month
-                                            }
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    id: { $toString: "$_id" },
-                    fullname: 1,
-                    student_id: 1,
-                    program: 1,
-                    year_section: 1,
-                    room_number: 1,
-                    total_demerit_points: 1,
-                    total_going_out: 1,
-                    total_coming_in: 1
-                }
-            },
-            { $sort: { fullname: 1 } }
-        ]);
-
-        res.json(results);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
-
-exports.getStudentReport = async (req, res) => {
-    try {
-        const results = await User.aggregate([
-            { $match: { role: "student" } },
-            {
-                $lookup: {
-                    from: "attendance_logs",
-                    localField: "_id",
-                    foreignField: "user_id",
-                    as: "attendance"
-                }
-            },
-            {
-                $lookup: {
-                    from: "demerits",
-                    localField: "_id",
-                    foreignField: "user_id",
-                    as: "demerits"
-                }
-            },
-            {
-                $lookup: {
-                    from: "gate_requests",
-                    localField: "_id",
-                    foreignField: "user_id",
-                    as: "gate_requests"
-                }
-            },
-            {
-                $project: {
-                    fullname: 1,
-                    student_id: 1,
-                    program: 1,
-                    year_section: 1,
-                    room_number: 1,
-                    total_attendance: { $size: "$attendance" },
-                    total_demerits: { $size: "$demerits" },
-                    total_points: {
-                        $reduce: {
-                            input: "$demerits",
-                            initialValue: 0,
-                            in: { $add: ["$$value", { $ifNull: ["$$this.points", 0] }] }
-                        }
-                    },
-                    total_gate_requests: { $size: "$gate_requests" }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    id: { $toString: "$_id" },
-                    fullname: 1,
-                    student_id: 1,
-                    program: 1,
-                    year_section: 1,
-                    room_number: 1,
-                    total_attendance: 1,
-                    total_demerits: 1,
-                    total_points: 1,
-                    total_gate_requests: 1
-                }
-            },
-            { $sort: { fullname: 1 } }
-        ]);
-
-        res.json(results);
-    } catch (error) {
-        res.status(500).json(error);
-    }
+    );
 };

@@ -1,17 +1,24 @@
 require("dotenv").config();
 
-const mongoose = require("mongoose");
+const mysql = require("mysql2");
 
-const MONGODB_URI =
-    process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/dormhub_db";
+console.log("DB USER:", process.env.DB_USER);
 
-async function connectDB() {
-    try {
-        await mongoose.connect(MONGODB_URI);
-        console.log("MongoDB Connected...");
-    } catch (err) {
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
+});
+
+db.connect((err) => {
+
+    if (err) {
         console.log("Database Error:", err);
+    } else {
+        console.log("MySQL Connected...");
     }
-}
 
-module.exports = { connectDB, mongoose, MONGODB_URI };
+});
+
+module.exports = db;
