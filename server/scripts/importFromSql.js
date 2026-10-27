@@ -7,6 +7,8 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const GateRequest = require("../models/GateRequest");
 const Demerit = require("../models/Demerit");
+const AttendanceLog = require("../models/AttendanceLog");
+const FaceDescriptor = require("../models/FaceDescriptor");
 const NightlyAttendance = require("../models/NightlyAttendance");
 const WebauthnCredential = require("../models/WebauthnCredential");
 
@@ -149,32 +151,36 @@ const BOOLEAN_FIELDS = {
 
 const TIMESTAMP_FIELDS = {
     users: ["created_at"],
+    attendance_logs: ["created_at"],
     gate_requests: ["created_at", "updated_at"],
     demerits: ["created_at"],
+    face_descriptors: ["created_at", "updated_at"],
     nightly_attendance: ["created_at", "checked_at"],
     webauthn_credentials: ["created_at"]
 };
 
 const REF_FIELDS = {
     users: [],
+    attendance_logs: ["user_id", "marked_by"],
     gate_requests: ["user_id", "approved_by"],
     demerits: ["user_id"],
+    face_descriptors: ["user_id"],
     nightly_attendance: ["user_id"],
     webauthn_credentials: ["user_id"]
 };
 
 async function importData() {
+    if (!process.env.MONGODB_URI) {
+        throw new Error("MONGODB_URI is required to import SQL data");
+    }
     if (!fs.existsSync(SQL_FILE)) {
-        console.error(`SQL file not found: ${SQL_FILE}`);
-        process.exit(1);
+        throw new Error(`SQL file not found: ${SQL_FILE}`);
     }
 
     const sql = fs.readFileSync(SQL_FILE, "utf8");
 
-    await mongoose.connect(
-        process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/dormhub_db"
-    );
-    console.log("MongoDB Connected...");
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log("MongoDB connected");
 
     const inserts = parseInserts(sql);
     const tables = inserts.map((i) => i.table);
@@ -191,8 +197,10 @@ async function importData() {
 
     const clean = await Promise.all([
         User.deleteMany({ legacy_id: { $exists: true } }),
+        AttendanceLog.deleteMany({ legacy_id: { $exists: true } }),
         GateRequest.deleteMany({ legacy_id: { $exists: true } }),
         Demerit.deleteMany({ legacy_id: { $exists: true } }),
+        FaceDescriptor.deleteMany({ legacy_id: { $exists: true } }),
         NightlyAttendance.deleteMany({ legacy_id: { $exists: true } }),
         WebauthnCredential.deleteMany({ legacy_id: { $exists: true } })
     ]);
@@ -206,8 +214,10 @@ async function importData() {
 
         let Model;
         if (table === "users") Model = User;
+        else if (table === "attendance_logs") Model = AttendanceLog;
         else if (table === "gate_requests") Model = GateRequest;
         else if (table === "demerits") Model = Demerit;
+        else if (table === "face_descriptors") Model = FaceDescriptor;
         else if (table === "nightly_attendance") Model = NightlyAttendance;
         else if (table === "webauthn_credentials") Model = WebauthnCredential;
         else {
@@ -226,7 +236,7 @@ async function importData() {
 
             for (const [key, value] of Object.entries(row)) {
                 if (key === "id") {
-                    if (table === "users") doc.legacy_id = value;
+                    doc.legacy_id = value;
                     continue;
                 }
 
@@ -267,10 +277,11 @@ async function importData() {
     }
 
     console.log("Import complete:", total);
-    process.exit(0);
 }
 
 importData().catch((err) => {
-    console.error("Import failed:", err);
-    process.exit(1);
+    console.error("Import failed:", err.message);
+    process.exitCode = 1;
+}).finally(async () => {
+    if (mongoose.connection.readyState) await mongoose.disconnect();
 });

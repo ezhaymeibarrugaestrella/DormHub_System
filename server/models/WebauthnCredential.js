@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const webauthnCredentialSchema = new mongoose.Schema(
     {
         user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-        credential_id: { type: String },
+        credential_id: { type: String, unique: true, sparse: true },
         public_key: String,
         counter: { type: Number, default: 0 },
         transports: String,

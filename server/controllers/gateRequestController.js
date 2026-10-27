@@ -1,63 +1,44 @@
-const db = require("../config/db");
+const GateRequest = require("../models/GateRequest");
+const { serializeGateRequest } = require("../utils/serialize");
 
-exports.getAll = (req, res) => {
+exports.getAll = async (req, res) => {
     const userId = req.user.id;
     const role = req.user.role;
-
-    if (role === "superadmin" || role === "staff") {
-        db.query(
-            `SELECT gr.*, u.fullname, u.student_id, u.room_number,
-                    a.fullname AS approved_by_name
-             FROM gate_requests gr
-             JOIN users u ON gr.user_id = u.id
-             LEFT JOIN users a ON gr.approved_by = a.id
-             ORDER BY gr.created_at DESC`,
-            (err, results) => {
-                if (err) return res.status(500).json(err);
-                res.json(results);
-            }
-        );
-    } else {
-        db.query(
-            `SELECT gr.*, a.fullname AS approved_by_name
-             FROM gate_requests gr
-             LEFT JOIN users a ON gr.approved_by = a.id
-             WHERE gr.user_id = ?
-             ORDER BY gr.created_at DESC`,
-            [userId],
-            (err, results) => {
-                if (err) return res.status(500).json(err);
-                res.json(results);
-            }
-        );
+    try {
+        const filter = role === "superadmin" || role === "staff" ? {} : { user_id: userId };
+        const results = await GateRequest.find(filter)
+            .populate("user_id", "fullname student_id room_number")
+            .populate("approved_by", "fullname")
+            .sort({ created_at: -1 });
+        res.json(results.map(serializeGateRequest));
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 };
 
-exports.getPendingCount = (req, res) => {
-    db.query(
-        "SELECT COUNT(*) AS count FROM gate_requests WHERE status = 'pending'",
-        (err, result) => {
-            if (err) return res.status(500).json(err);
-            res.json({ count: result[0].count });
-        }
-    );
+exports.getPendingCount = async (req, res) => {
+    try {
+        const count = await GateRequest.countDocuments({ status: "pending" });
+        res.json({ count });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.getRecent = (req, res) => {
-    db.query(
-        `SELECT gr.*, u.fullname, u.student_id, a.fullname AS approved_by_name
-         FROM gate_requests gr
-         JOIN users u ON gr.user_id = u.id
-         LEFT JOIN users a ON gr.approved_by = a.id
-         ORDER BY gr.created_at DESC LIMIT 5`,
-        (err, results) => {
-            if (err) return res.status(500).json(err);
-            res.json(results);
-        }
-    );
+exports.getRecent = async (req, res) => {
+    try {
+        const results = await GateRequest.find()
+            .populate("user_id", "fullname student_id")
+            .populate("approved_by", "fullname")
+            .sort({ created_at: -1 })
+            .limit(5);
+        res.json(results.map(serializeGateRequest));
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.create = (req, res) => {
+exports.create = async (req, res) => {
     const userId = req.user.id;
     const { requestType, locationLat, locationLng } = req.body;
 
@@ -65,22 +46,21 @@ exports.create = (req, res) => {
         return res.status(400).json({ message: "Valid request type required (in/out)" });
     }
 
-    db.query(
-        `INSERT INTO gate_requests
-        (user_id, request_type, location_lat, location_lng, fingerprint_verified)
-        VALUES (?, ?, ?, ?, TRUE)`,
-        [userId, requestType, locationLat || null, locationLng || null],
-        (err, result) => {
-            if (err) return res.status(500).json(err);
-            res.status(201).json({
-                message: "Gate request submitted successfully",
-                id: result.insertId
-            });
-        }
-    );
+    try {
+        const request = await GateRequest.create({
+            user_id: userId,
+            request_type: requestType,
+            location_lat: locationLat,
+            location_lng: locationLng,
+            fingerprint_verified: true
+        });
+        res.status(201).json({ message: "Gate request submitted successfully", id: request.id });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.update = (req, res) => {
+exports.update = async (req, res) => {
     const userId = req.user.id;
     const role = req.user.role;
     const { id } = req.params;
@@ -94,15 +74,15 @@ exports.update = (req, res) => {
         return res.status(400).json({ message: "Status must be 'approved' or 'rejected'" });
     }
 
-    db.query(
-        "UPDATE gate_requests SET status = ?, remarks = ?, approved_by = ? WHERE id = ?",
-        [status, remarks || null, userId, id],
-        (err, result) => {
-            if (err) return res.status(500).json(err);
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: "Gate request not found" });
-            }
-            res.json({ message: `Request ${status} successfully` });
-        }
-    );
+    try {
+        const request = await GateRequest.findByIdAndUpdate(
+            id,
+            { status, remarks: remarks || undefined, approved_by: userId },
+            { runValidators: true }
+        );
+        if (!request) return res.status(404).json({ message: "Gate request not found" });
+        res.json({ message: `Request ${status} successfully` });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };

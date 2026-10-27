@@ -1,29 +1,31 @@
-const db = require("../config/db");
 const bcrypt = require("bcryptjs");
+const User = require("../models/User");
+const GateRequest = require("../models/GateRequest");
+const WebauthnCredential = require("../models/WebauthnCredential");
+const { serializeUser } = require("../utils/serialize");
 
-exports.getProfile = (req, res) => {
-    db.query(
-        "SELECT id, fullname, email, student_id, role, program, year_section, room_number, address, parent_name, parent_contact, profile_picture, status, fingerprint_registered FROM users WHERE id = ?",
-        [req.user.id],
-        (err, results) => {
-            if (err) return res.status(500).json(err);
-            if (results.length === 0) return res.status(404).json({ message: "User not found" });
-            res.json(results[0]);
-        }
-    );
+exports.getProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+        res.json(serializeUser(user));
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.updateProfile = (req, res) => {
+exports.updateProfile = async (req, res) => {
     const { fullname, email, program, year_section } = req.body;
-
-    db.query(
-        "UPDATE users SET fullname = ?, email = ?, program = ?, year_section = ? WHERE id = ?",
-        [fullname, email, program || null, year_section || null, req.user.id],
-        (err, result) => {
-            if (err) return res.status(500).json(err);
-            res.json({ message: "Profile updated" });
+    try {
+        const updates = {};
+        for (const [field, value] of Object.entries({ fullname, email, program, year_section })) {
+            if (value !== undefined) updates[field] = value || undefined;
         }
-    );
+        await User.findByIdAndUpdate(req.user.id, updates, { runValidators: true });
+        res.json({ message: "Profile updated" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
 exports.changePassword = async (req, res) => {
@@ -37,37 +39,32 @@ exports.changePassword = async (req, res) => {
         return res.status(400).json({ message: "New password must be at least 6 characters" });
     }
 
-    db.query("SELECT password FROM users WHERE id = ?", [req.user.id], async (err, results) => {
-        if (err) return res.status(500).json(err);
-        if (results.length === 0) return res.status(404).json({ message: "User not found" });
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
 
-        const valid = await bcrypt.compare(currentPassword, results[0].password);
+        const valid = await bcrypt.compare(currentPassword, user.password);
         if (!valid) {
             return res.status(401).json({ message: "Current password is incorrect" });
         }
 
-        const hashed = await bcrypt.hash(newPassword, 10);
-        db.query("UPDATE users SET password = ? WHERE id = ?", [hashed, req.user.id], (err) => {
-            if (err) return res.status(500).json(err);
-            res.json({ message: "Password changed successfully" });
-        });
-    });
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+        res.json({ message: "Password changed successfully" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.getSystemInfo = (req, res) => {
-    const info = {};
-
-    db.query("SELECT COUNT(*) AS total FROM users", (err, users) => {
-        info.totalUsers = users[0]?.total || 0;
-
-        db.query("SELECT COUNT(*) AS total FROM gate_requests", (err, requests) => {
-            info.totalGateRequests = requests[0]?.total || 0;
-
-            db.query("SELECT COUNT(*) AS total FROM webauthn_credentials", (err, creds) => {
-                info.totalBiometricRegistrations = creds[0]?.total || 0;
-                info.serverTime = new Date().toISOString();
-                res.json(info);
-            });
-        });
-    });
+exports.getSystemInfo = async (req, res) => {
+    try {
+        const [totalUsers, totalGateRequests, totalBiometricRegistrations] = await Promise.all([
+            User.countDocuments(),
+            GateRequest.countDocuments(),
+            WebauthnCredential.countDocuments()
+        ]);
+        res.json({ totalUsers, totalGateRequests, totalBiometricRegistrations, serverTime: new Date().toISOString() });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
