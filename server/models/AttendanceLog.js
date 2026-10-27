@@ -23,4 +23,6 @@ const attendanceLogSchema = new mongoose.Schema(
     }
 );
 
+attendanceLogSchema.index({ user_id: 1, date: 1 }, { unique: true });
+
 module.exports = mongoose.model("AttendanceLog", attendanceLogSchema);

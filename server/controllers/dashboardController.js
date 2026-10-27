@@ -1,22 +1,17 @@
-const db = require("../config/db");
+const User = require("../models/User");
+const AttendanceLog = require("../models/AttendanceLog");
+const Demerit = require("../models/Demerit");
 
-exports.getDashboardStats = (req, res) => {
-    const stats = {};
-
-    db.query("SELECT COUNT(*) AS totalUsers FROM users", (err, users) => {
-        stats.totalUsers = users[0].totalUsers;
-
-        db.query("SELECT COUNT(*) AS totalAttendance FROM attendance_logs", (err, attendance) => {
-            stats.totalAttendance = attendance[0].totalAttendance;
-
-            db.query("SELECT COUNT(*) AS totalDemerits FROM demerits", (err, demerits) => {
-                stats.totalDemerits = demerits[0].totalDemerits;
-
-                db.query("SELECT COUNT(*) AS activeUsers FROM users WHERE status = 'active'", (err, active) => {
-                    stats.activeUsers = active[0].activeUsers;
-                    res.json(stats);
-                });
-            });
-        });
-    });
+exports.getDashboardStats = async (req, res) => {
+    try {
+        const [totalUsers, totalAttendance, totalDemerits, activeUsers] = await Promise.all([
+            User.countDocuments(),
+            AttendanceLog.countDocuments(),
+            Demerit.countDocuments(),
+            User.countDocuments({ status: "active" })
+        ]);
+        res.json({ totalUsers, totalAttendance, totalDemerits, activeUsers });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };

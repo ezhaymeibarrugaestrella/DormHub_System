@@ -1,17 +1,16 @@
-const db = require("../config/db");
+const FaceDescriptor = require("../models/FaceDescriptor");
+const User = require("../models/User");
 
-exports.getStatus = (req, res) => {
-    db.query(
-        "SELECT COUNT(*) AS count FROM face_descriptors WHERE user_id = ?",
-        [req.user.id],
-        (err, result) => {
-            if (err) return res.status(500).json(err);
-            res.json({ registered: result[0].count > 0, face_registered: result[0].count > 0 });
-        }
-    );
+exports.getStatus = async (req, res) => {
+    try {
+        const registered = Boolean(await FaceDescriptor.exists({ user_id: req.user.id }));
+        res.json({ registered, face_registered: registered });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.register = (req, res) => {
+exports.register = async (req, res) => {
     const userId = req.user.id;
     const { descriptor } = req.body;
 
@@ -19,42 +18,21 @@ exports.register = (req, res) => {
         return res.status(400).json({ message: "Valid face descriptor is required" });
     }
 
-    db.query(
-        "SELECT id FROM face_descriptors WHERE user_id = ?",
-        [userId],
-        (err, existing) => {
-            if (err) return res.status(500).json(err);
-
-            const descriptorJson = JSON.stringify(descriptor);
-
-            if (existing.length > 0) {
-                db.query(
-                    "UPDATE face_descriptors SET descriptor = ? WHERE user_id = ?",
-                    [descriptorJson, userId],
-                    (err) => {
-                        if (err) return res.status(500).json(err);
-                        res.json({ message: "Face descriptor updated successfully" });
-                    }
-                );
-            } else {
-                db.query(
-                    "INSERT INTO face_descriptors (user_id, descriptor) VALUES (?, ?)",
-                    [userId, descriptorJson],
-                    (err) => {
-                        if (err) return res.status(500).json(err);
-                        db.query(
-                            "UPDATE users SET fingerprint_registered = 1 WHERE id = ?",
-                            [userId]
-                        );
-                        res.json({ message: "Face registered successfully" });
-                    }
-                );
-            }
-        }
-    );
+    try {
+        const existing = await FaceDescriptor.exists({ user_id: userId });
+        await FaceDescriptor.findOneAndUpdate(
+            { user_id: userId },
+            { descriptor: JSON.stringify(descriptor) },
+            { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+        );
+        await User.findByIdAndUpdate(userId, { fingerprint_registered: true });
+        res.json({ message: existing ? "Face descriptor updated successfully" : "Face registered successfully" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.verify = (req, res) => {
+exports.verify = async (req, res) => {
     const userId = req.user.id;
     const { descriptor } = req.body;
 
@@ -62,28 +40,21 @@ exports.verify = (req, res) => {
         return res.status(400).json({ message: "Valid face descriptor is required" });
     }
 
-    db.query(
-        "SELECT descriptor FROM face_descriptors WHERE user_id = ?",
-        [userId],
-        (err, rows) => {
-            if (err) return res.status(500).json(err);
-            if (rows.length === 0) {
-                return res.status(400).json({ message: "No face registered. Please register your face first.", verified: false });
-            }
-
-            const storedDescriptor = JSON.parse(rows[0].descriptor);
-
-            const distance = computeEuclideanDistance(descriptor, storedDescriptor);
-            const threshold = parseFloat(process.env.FACE_MATCH_THRESHOLD || "0.5");
-            const verified = distance < threshold;
-
-            if (verified) {
-                res.json({ message: "Face verified successfully", verified: true, distance });
-            } else {
-                res.status(401).json({ message: "Face does not match", verified: false, distance });
-            }
+    try {
+        const stored = await FaceDescriptor.findOne({ user_id: userId });
+        if (!stored) {
+            return res.status(400).json({ message: "No face registered. Please register your face first.", verified: false });
         }
-    );
+
+        const storedDescriptor = JSON.parse(stored.descriptor);
+        const distance = computeEuclideanDistance(descriptor, storedDescriptor);
+        const threshold = parseFloat(process.env.FACE_MATCH_THRESHOLD || "0.5");
+        const verified = distance < threshold;
+        if (verified) return res.json({ message: "Face verified successfully", verified: true, distance });
+        res.status(401).json({ message: "Face does not match", verified: false, distance });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
 function computeEuclideanDistance(a, b) {

@@ -6,8 +6,7 @@ const http = require("http");
 
 const { Server } = require("socket.io");
 
-const db = require("./config/db");
-const { createTables } = require("./seeders/createTables");
+const connectDB = require("./config/db");
 
 const authRoutes = require("./routes/authRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -56,10 +55,16 @@ io.on("connection", (socket) => {
     });
 });
 
-createTables();
-
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+async function startServer() {
+    await connectDB();
+    server.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+startServer().catch((error) => {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
 });

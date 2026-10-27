@@ -1,47 +1,38 @@
 const bcrypt = require("bcryptjs");
-const db = require("../config/db");
+const connectDB = require("../config/db");
+const User = require("../models/User");
 
 async function createSuperAdmin() {
+    const email = process.env.SUPERADMIN_EMAIL;
+    const password = process.env.SUPERADMIN_PASSWORD;
+    if (!email || !password) {
+        throw new Error("Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD to run this one-time seeder");
+    }
 
-    const hashedPassword =
-        await bcrypt.hash("admin123", 10);
+    await connectDB();
+    const existing = await User.findOne({ email });
+    if (existing) {
+        console.log("Super admin already exists");
+        return;
+    }
 
-    const sql = `
-        INSERT INTO users
-        (
-            student_id,
-            fullname,
-            email,
-            password,
-            role,
-            status
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    db.query(
-        sql,
-        [
-            "SUPER-ADMIN-001",
-            "DormHub Super Admin",
-            "superadmin@dormhub.com",
-            hashedPassword,
-            "superadmin",
-            "active"
-        ],
-        (err, result) => {
-
-            if (err) {
-                console.log(err);
-            } else {
-                console.log(
-                    "Super Admin Created Successfully"
-                );
-            }
-
-            process.exit();
-        }
-    );
+    await User.create({
+        student_id: "SUPER-ADMIN-001",
+        fullname: "DormHub Super Admin",
+        email,
+        password: await bcrypt.hash(password, 10),
+        role: "superadmin",
+        status: "active"
+    });
+    console.log("Super admin created");
 }
 
-createSuperAdmin();
+createSuperAdmin()
+    .catch((error) => {
+        console.error("Super admin seeding failed:", error.message);
+        process.exitCode = 1;
+    })
+    .finally(async () => {
+        const mongoose = require("mongoose");
+        if (mongoose.connection.readyState) await mongoose.disconnect();
+    });
