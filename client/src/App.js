@@ -35,6 +35,11 @@ function App() {
                     element={<Login />}
                 />
 
+                <Route
+                    path="/verify-email"
+                    element={<VerifyEmail />}
+                />
+
                 {/* DASHBOARD */}
                 <Route
                     path="/dashboard"

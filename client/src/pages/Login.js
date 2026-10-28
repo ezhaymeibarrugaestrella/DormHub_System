@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { API_BASE } from "../services/api";
 import { Link, useSearchParams } from "react-router-dom";
 import {
     FaUserGraduate,
@@ -21,8 +22,6 @@ function Login() {
     const [loading, setLoading] = useState(false);
     const [loginRole, setLoginRole] = useState("student");
     const [error, setError] = useState("");
-    const getApiUrl = () => process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000`;
-
     const registrationStatus = searchParams.get("registration");
     const verificationStatus = searchParams.get("verification");
     const [pendingEmail, setPendingEmail] = useState(() => localStorage.getItem("pendingVerificationEmail") || "");
@@ -36,7 +35,7 @@ function Login() {
         setResending(true);
         setResendMessage("");
         try {
-            const res = await axios.post(`${getApiUrl()}/api/auth/resend-verification`, {
+            const res = await axios.post(`${API_BASE}/api/auth/resend-verification`, {
                 email: targetEmail
             });
             if (res.data.dev_link) {
@@ -62,7 +61,7 @@ function Login() {
         setNeedsVerification(false);
 
         try {
-            const res = await axios.post(`${getApiUrl()}/api/auth/login`, { email, password });
+            const res = await axios.post(`${API_BASE}/api/auth/login`, { email, password });
 
             localStorage.setItem("token", res.data.token);
             localStorage.setItem("user", JSON.stringify(res.data.user));

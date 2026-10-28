@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
+const path = require("path");
 
 const { Server } = require("socket.io");
 
@@ -28,6 +29,10 @@ app.use(express.static("public"));
 
 app.get("/", (req, res) => {
     res.send("DormHub API Running...");
+});
+
+app.get("/verify-email", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.use("/api/auth", authRoutes);

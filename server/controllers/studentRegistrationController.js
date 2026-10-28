@@ -2,13 +2,15 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const { serializeUser } = require("../utils/serialize");
+const EmailVerificationToken = require("../models/EmailVerificationToken");
+const { isDevMode, issueVerificationToken } = require("../services/verification");
 
 exports.register = async (req, res) => {
+    let user;
     try {
         const {
             student_id,
             fullname,
-            email,
             password,
             program,
             year_section,
@@ -18,10 +20,11 @@ exports.register = async (req, res) => {
             parent_contact,
             parent_address
         } = req.body;
+        const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = await User.create({
+        user = await User.create({
             student_id,
             fullname,
             email,
@@ -38,13 +41,18 @@ exports.register = async (req, res) => {
             status: "active",
             email_verified: false
         });
-        const token = jwt.sign({ id: user.id, role: "student" }, process.env.JWT_SECRET, { expiresIn: "1d" });
+        const verification = await issueVerificationToken(user);
+        const token = jwt.sign(
+            { id: user.id, role: "student", scope: "registration" },
+            process.env.JWT_SECRET,
+            { expiresIn: "1d" }
+        );
         res.status(201).json({
-            message: "Registration submitted. Please register your fingerprint.",
+            message: "Registration submitted. Verify your email and register your fingerprint.",
             token,
             verification: {
                 required: true,
-                ...(verification && verification.link ? { dev_link: verification.link } : {})
+                ...(isDevMode() && verification.link ? { dev_link: verification.link } : {})
             },
             user: {
                 id: user.id,
@@ -56,6 +64,15 @@ exports.register = async (req, res) => {
             }
         });
     } catch (error) {
+        if (user) {
+            await Promise.all([
+                User.deleteOne({ _id: user._id }),
+                EmailVerificationToken.deleteMany({ user_id: user._id, used_at: null })
+            ]).catch(() => {});
+        }
+        if (error.code === "EMAIL_DELIVERY_NOT_CONFIGURED") {
+            return res.status(503).json({ message: "Email verification is temporarily unavailable" });
+        }
         res.status(error.code === 11000 ? 409 : 500).json({ message: "Registration failed", error: error.message });
     }
 };

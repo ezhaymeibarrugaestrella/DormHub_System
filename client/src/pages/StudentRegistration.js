@@ -22,6 +22,7 @@ import {
 } from "react-icons/fa";
 import axios from "axios";
 import FaceCamera from "../components/FaceCamera";
+import { API_BASE } from "../services/api";
 import {
     startRegistration,
     browserSupportsWebAuthn,
@@ -53,8 +54,6 @@ function StudentRegistration() {
     const [bioLoading, setBioLoading] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
     const [verification, setVerification] = useState(null);
-    const getApiUrl = () => process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000`;
-
     useEffect(() => {
         const checkWebAuthn = async () => {
             try {
@@ -92,7 +91,7 @@ function StudentRegistration() {
         setMessage({ type: "", text: "" });
 
         try {
-            const base = getApiUrl();
+            const base = API_BASE;
             const res = await axios.post(`${base}/api/student-registration/register`, {
                 student_id: formData.studentId,
                 fullname: formData.fullname,
@@ -135,7 +134,7 @@ function StudentRegistration() {
     const handleFaceCapture = async (descriptor, imageData) => {
         setRegisteringFace(true);
         try {
-            const base = getApiUrl();
+            const base = API_BASE;
             await axios.post(
                 `${base}/api/face-auth/register`,
                 { descriptor },
@@ -175,7 +174,7 @@ function StudentRegistration() {
         setBioLoading(true);
         setMessage({ type: "", text: "" });
         try {
-            const base = getApiUrl();
+            const base = API_BASE;
             const token = localStorage.getItem("token");
             const beginRes = await axios.post(
                 `${base}/api/webauthn/register/begin`,

@@ -8,10 +8,9 @@ import {
     FaUserCheck,
     FaSmile
 } from "react-icons/fa";
+import { API_BASE } from "../services/api";
 
-const MODEL_URL = process.env.REACT_APP_API_URL
-    ? `${process.env.REACT_APP_API_URL}/models`
-    : `http://${window.location.hostname}:5000/models`;
+const MODEL_URL = `${API_BASE}/models`;
 
 function FaceCamera({ mode, onSuccess, onError }) {
     const videoRef = useRef(null);

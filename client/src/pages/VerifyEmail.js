@@ -6,10 +6,7 @@ import {
     FaEnvelope,
     FaArrowLeft
 } from "react-icons/fa";
-import axios from "axios";
-
-const getApiUrl = () =>
-    process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000`;
+import API from "../services/api";
 
 function VerifyEmail() {
     const [searchParams] = useSearchParams();
@@ -31,7 +28,7 @@ function VerifyEmail() {
 
         (async () => {
             try {
-                const res = await axios.post(`${getApiUrl()}/api/auth/verify-email`, {
+                const res = await API.post("/auth/verify-email", {
                     token
                 });
                 localStorage.removeItem("pendingVerificationEmail");

@@ -14,25 +14,30 @@ function isDevMode() {
 
 async function issueVerificationToken(user, emailOverride) {
     const email = emailOverride || user.email;
-
-    await EmailVerificationToken.deleteMany({ user_id: user._id, used_at: null });
-
     const raw = crypto.randomBytes(32).toString("hex");
 
-    await EmailVerificationToken.create({
+    const verification = await EmailVerificationToken.create({
         user_id: user._id,
         email,
         token_hash: hashToken(raw),
         expires_at: new Date(Date.now() + VERIFICATION_TTL_MS)
     });
 
-    const result = await sendVerificationEmail({
-        to: email,
-        fullname: user.fullname,
-        token: raw
+    let result;
+    try {
+        result = await sendVerificationEmail({ to: email, fullname: user.fullname, token: raw });
+    } catch (error) {
+        await verification.deleteOne();
+        throw error;
+    }
+
+    await EmailVerificationToken.deleteMany({
+        user_id: user._id,
+        used_at: null,
+        _id: { $ne: verification._id }
     });
 
-    return { token: raw, ...result };
+    return result;
 }
 
 async function issueVerificationSafely(user, emailOverride) {
