@@ -4,6 +4,7 @@ const GateRequest = require("../models/GateRequest");
 const WebauthnCredential = require("../models/WebauthnCredential");
 const { serializeUser } = require("../utils/serialize");
 const { isDevMode, issueVerificationToken } = require("../services/verification");
+const { EMAIL_VERIFICATION_ENABLED } = require("../config/featureFlags");
 
 exports.getProfile = async (req, res) => {
     try {
@@ -39,11 +40,11 @@ exports.updateProfile = async (req, res) => {
         if (year_section !== undefined) user.year_section = year_section || undefined;
         if (emailChanged) {
             user.email = normalizedEmail;
-            user.email_verified = false;
+            user.email_verified = !EMAIL_VERIFICATION_ENABLED;
         }
         await user.save();
 
-        if (!emailChanged) return res.json({ message: "Profile updated" });
+        if (!emailChanged || !EMAIL_VERIFICATION_ENABLED) return res.json({ message: "Profile updated" });
 
         const verification = await issueVerificationToken(user);
         res.json({

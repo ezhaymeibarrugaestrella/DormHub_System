@@ -14,10 +14,13 @@ const {
     resendLimiter,
     verifyLimiter
 } = require("../config/rateLimits");
+const { EMAIL_VERIFICATION_ENABLED } = require("../config/featureFlags");
 
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
-router.post("/verify-email", verifyLimiter, verifyEmail);
-router.post("/resend-verification", resendLimiter, resendVerification);
+if (EMAIL_VERIFICATION_ENABLED) {
+    router.post("/verify-email", verifyLimiter, verifyEmail);
+    router.post("/resend-verification", resendLimiter, resendVerification);
+}
 
 module.exports = router;

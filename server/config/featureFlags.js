@@ -1,0 +1,3 @@
+const EMAIL_VERIFICATION_ENABLED = false;
+
+module.exports = { EMAIL_VERIFICATION_ENABLED };

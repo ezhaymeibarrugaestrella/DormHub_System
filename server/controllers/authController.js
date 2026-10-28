@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const EmailVerificationToken = require("../models/EmailVerificationToken");
 const { hashToken, isDevMode, issueVerificationToken } = require("../services/verification");
+const { EMAIL_VERIFICATION_ENABLED } = require("../config/featureFlags");
 
 const INVALID_LOGIN_MESSAGE = "Invalid email or password";
 
@@ -32,17 +33,21 @@ exports.register = async (req, res) => {
             password: hashedPassword,
             role: "student",
             registration_status: "pending",
-            email_verified: false
+            email_verified: !EMAIL_VERIFICATION_ENABLED
         });
-        const verification = await issueVerificationToken(user);
+        const verification = EMAIL_VERIFICATION_ENABLED ? await issueVerificationToken(user) : null;
         res.status(201).json({
-            message: "Registration submitted. Verify your email and wait for account approval.",
+            message: EMAIL_VERIFICATION_ENABLED
+                ? "Registration submitted. Verify your email and wait for account approval."
+                : "Registration submitted. Wait for account approval.",
             id: user.id,
             token: registrationToken(user),
-            verification: {
-                required: true,
-                ...(isDevMode() && verification.link ? { dev_link: verification.link } : {})
-            }
+            ...(EMAIL_VERIFICATION_ENABLED ? {
+                verification: {
+                    required: true,
+                    ...(isDevMode() && verification.link ? { dev_link: verification.link } : {})
+                }
+            } : {})
         });
     } catch (error) {
         if (user) {
@@ -69,7 +74,7 @@ exports.login = async (req, res) => {
             : false;
         if (!validPassword) return res.status(401).json({ message: INVALID_LOGIN_MESSAGE });
 
-        if (user.email_verified === false) {
+        if (EMAIL_VERIFICATION_ENABLED && user.email_verified === false) {
             return res.status(403).json({
                 message: "Please verify your email before signing in.",
                 requires_verification: true
@@ -102,6 +107,10 @@ exports.login = async (req, res) => {
 };
 
 exports.verifyEmail = async (req, res) => {
+    if (!EMAIL_VERIFICATION_ENABLED) {
+        return res.status(404).json({ message: "Email verification is disabled" });
+    }
+
     const rawToken = req.body.token;
     if (typeof rawToken !== "string" || !/^[a-f0-9]{64}$/i.test(rawToken)) {
         return res.status(400).json({ message: "Verification link is invalid or has expired." });
@@ -137,6 +146,10 @@ exports.verifyEmail = async (req, res) => {
 };
 
 exports.resendVerification = async (req, res) => {
+    if (!EMAIL_VERIFICATION_ENABLED) {
+        return res.status(404).json({ message: "Email verification is disabled" });
+    }
+
     const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
     if (!email) return res.status(400).json({ message: "Email is required" });
 

@@ -4,6 +4,7 @@ const User = require("../models/User");
 const { serializeUser } = require("../utils/serialize");
 const EmailVerificationToken = require("../models/EmailVerificationToken");
 const { isDevMode, issueVerificationToken } = require("../services/verification");
+const { EMAIL_VERIFICATION_ENABLED } = require("../config/featureFlags");
 
 exports.register = async (req, res) => {
     let user;
@@ -39,21 +40,25 @@ exports.register = async (req, res) => {
             parent_address,
             registration_status: "pending",
             status: "active",
-            email_verified: false
+            email_verified: !EMAIL_VERIFICATION_ENABLED
         });
-        const verification = await issueVerificationToken(user);
+        const verification = EMAIL_VERIFICATION_ENABLED ? await issueVerificationToken(user) : null;
         const token = jwt.sign(
             { id: user.id, role: "student", scope: "registration" },
             process.env.JWT_SECRET,
             { expiresIn: "1d" }
         );
         res.status(201).json({
-            message: "Registration submitted. Verify your email and register your fingerprint.",
+            message: EMAIL_VERIFICATION_ENABLED
+                ? "Registration submitted. Verify your email and register your fingerprint."
+                : "Registration submitted. Register your fingerprint and wait for account approval.",
             token,
-            verification: {
-                required: true,
-                ...(isDevMode() && verification.link ? { dev_link: verification.link } : {})
-            },
+            ...(EMAIL_VERIFICATION_ENABLED ? {
+                verification: {
+                    required: true,
+                    ...(isDevMode() && verification.link ? { dev_link: verification.link } : {})
+                }
+            } : {}),
             user: {
                 id: user.id,
                 fullname,
