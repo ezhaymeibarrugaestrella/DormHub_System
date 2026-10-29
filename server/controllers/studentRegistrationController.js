@@ -1,9 +1,7 @@
-const User = require("../models/User");
-const { serializeUser } = require("../utils/serialize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-
-const STATUS_ORDER = { pending: 0, approved: 1, rejected: 2 };
+const User = require("../models/User");
+const { serializeUser } = require("../utils/serialize");
 
 exports.register = async (req, res) => {
     try {
@@ -29,26 +27,25 @@ exports.register = async (req, res) => {
             email,
             password: hashedPassword,
             role: "student",
-            program: program || null,
-            year_section: year_section || null,
-            room_number: room_number || null,
-            address: address || null,
-            parent_name: parent_name || null,
-            parent_contact: parent_contact || null,
-            parent_address: parent_address || null,
+            program,
+            year_section,
+            room_number,
+            address,
+            parent_name,
+            parent_contact,
+            parent_address,
             registration_status: "pending",
-            status: "active"
+            status: "active",
+            email_verified: false
         });
-
-        const token = jwt.sign(
-            { id: user.id, role: "student" },
-            process.env.JWT_SECRET,
-            { expiresIn: "1d" }
-        );
-
+        const token = jwt.sign({ id: user.id, role: "student" }, process.env.JWT_SECRET, { expiresIn: "1d" });
         res.status(201).json({
             message: "Registration submitted. Please register your fingerprint.",
             token,
+            verification: {
+                required: true,
+                ...(verification && verification.link ? { dev_link: verification.link } : {})
+            },
             user: {
                 id: user.id,
                 fullname,
@@ -59,10 +56,7 @@ exports.register = async (req, res) => {
             }
         });
     } catch (error) {
-        if (error.code === 11000) {
-            return res.status(409).json({ message: "Email or Student ID already exists" });
-        }
-        res.status(500).json({ message: "Registration failed", error: error.message });
+        res.status(error.code === 11000 ? 409 : 500).json({ message: "Registration failed", error: error.message });
     }
 };
 
@@ -74,34 +68,21 @@ exports.getAll = async (req, res) => {
     }
 
     try {
-        const results = await User.find({
-            role: "student",
-            registration_status: { $exists: true, $ne: null }
-        });
-
-        results.sort((a, b) => {
-            const statusDiff =
-                (STATUS_ORDER[a.registration_status] ?? 3) -
-                (STATUS_ORDER[b.registration_status] ?? 3);
-            if (statusDiff !== 0) return statusDiff;
-            return new Date(b.created_at) - new Date(a.created_at);
-        });
-
-        res.json(results.map(serializeUser));
+        const students = await User.find({ role: "student", registration_status: { $ne: null } }).sort({ created_at: -1 });
+        const statusOrder = { pending: 0, approved: 1, rejected: 2 };
+        students.sort((first, second) => (statusOrder[first.registration_status] ?? 3) - (statusOrder[second.registration_status] ?? 3));
+        res.json(students.map(serializeUser));
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };
 
 exports.getPendingCount = async (req, res) => {
     try {
-        const count = await User.countDocuments({
-            role: "student",
-            registration_status: "pending"
-        });
+        const count = await User.countDocuments({ role: "student", registration_status: "pending" });
         res.json({ count });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };
 
@@ -119,18 +100,14 @@ exports.updateStatus = async (req, res) => {
     }
 
     try {
-        const result = await User.findOneAndUpdate(
+        const student = await User.findOneAndUpdate(
             { _id: id, role: "student" },
-            { registration_status: status, registration_remarks: remarks || null },
-            { new: true }
+            { registration_status: status, registration_remarks: remarks || undefined },
+            { runValidators: true }
         );
-
-        if (!result) {
-            return res.status(404).json({ message: "Student not found" });
-        }
-
+        if (!student) return res.status(404).json({ message: "Student not found" });
         res.json({ message: `Registration ${status} successfully` });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };

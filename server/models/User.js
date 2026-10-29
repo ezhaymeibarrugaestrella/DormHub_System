@@ -20,6 +20,7 @@ const userSchema = new mongoose.Schema(
         parent_address: String,
         registration_status: String,
         registration_remarks: String,
+        email_verified: { type: Boolean, default: true },
         legacy_id: Number
     },
     {

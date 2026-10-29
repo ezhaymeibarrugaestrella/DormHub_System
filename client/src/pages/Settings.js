@@ -28,6 +28,7 @@ function Settings() {
     const [saving, setSaving] = useState(false);
     const [changingPw, setChangingPw] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
+    const [verificationLink, setVerificationLink] = useState("");
     const [activeTab, setActiveTab] = useState("profile");
 
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -66,11 +67,22 @@ function Settings() {
     const handleSaveProfile = async (e) => {
         e.preventDefault();
         setSaving(true);
+        setVerificationLink("");
         try {
-            await API.put("/settings/profile", form);
+            const res = await API.put("/settings/profile", form);
             const updated = { ...user, fullname: form.fullname, email: form.email };
             localStorage.setItem("user", JSON.stringify(updated));
-            showMessage("success", "Profile updated successfully");
+
+            if (res.data.requires_verification) {
+                localStorage.setItem("pendingVerificationEmail", form.email);
+                if (res.data.dev_link) {
+                    setVerificationLink(res.data.dev_link);
+                    localStorage.setItem("pendingVerificationDevLink", res.data.dev_link);
+                }
+                showMessage("warning", res.data.message);
+            } else {
+                showMessage("success", "Profile updated successfully");
+            }
         } catch (err) {
             showMessage("danger", err.response?.data?.message || "Failed to update");
         } finally { setSaving(false); }
@@ -117,6 +129,15 @@ function Settings() {
                         {message.type === "success" ? <FaCheckCircle className="me-1" /> : <FaExclamationTriangle className="me-1" />}
                         {message.text}
                         <button type="button" className="btn-close py-2" onClick={() => setMessage({ type: "", text: "" })} />
+                    </div>
+                )}
+
+                {verificationLink && (
+                    <div className="alert alert-warning py-2 small">
+                        Verify your new email address:{" "}
+                        <a href={verificationLink} target="_blank" rel="noreferrer">
+                            Open verification link
+                        </a>
                     </div>
                 )}
 

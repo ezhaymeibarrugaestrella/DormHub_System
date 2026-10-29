@@ -3,12 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
-const path = require("path");
 
 const { Server } = require("socket.io");
 
-const { connectDB } = require("./config/db");
-require("./models");
+const connectDB = require("./config/db");
 
 const authRoutes = require("./routes/authRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -44,15 +42,6 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/face-auth", faceAuthRoutes);
 app.use("/api/users", userRoutes);
 
-app.use((req, res, next) => {
-    if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) {
-        return next();
-    }
-    res.sendFile(path.join(__dirname, "public", "index.html"), (err) => {
-        if (err) next();
-    });
-});
-
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -68,15 +57,14 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(async () => {
-    const { ensureSuperAdmin } = require("./seeders/superAdminSeeder");
-    try {
-        const result = await ensureSuperAdmin();
-        if (result.created) console.log("Super Admin seeded on startup");
-    } catch (err) {
-        console.log("Super Admin seeding skipped:", err.message);
-    }
+async function startServer() {
+    await connectDB();
     server.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });
+}
+
+startServer().catch((error) => {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
 });

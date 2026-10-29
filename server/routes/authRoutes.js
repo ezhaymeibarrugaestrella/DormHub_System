@@ -3,10 +3,21 @@ const router = express.Router();
 
 const {
     register,
-    login
+    login,
+    verifyEmail,
+    resendVerification
 } = require("../controllers/authController");
 
-router.post("/register", register);
-router.post("/login", login);
+const {
+    loginLimiter,
+    registerLimiter,
+    resendLimiter,
+    verifyLimiter
+} = require("../config/rateLimits");
+
+router.post("/register", registerLimiter, register);
+router.post("/login", loginLimiter, login);
+router.post("/verify-email", verifyLimiter, verifyEmail);
+router.post("/resend-verification", resendLimiter, resendVerification);
 
 module.exports = router;

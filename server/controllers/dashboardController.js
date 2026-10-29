@@ -10,9 +10,8 @@ exports.getDashboardStats = async (req, res) => {
             Demerit.countDocuments(),
             User.countDocuments({ status: "active" })
         ]);
-
         res.json({ totalUsers, totalAttendance, totalDemerits, activeUsers });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };

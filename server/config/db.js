@@ -2,16 +2,14 @@ require("dotenv").config();
 
 const mongoose = require("mongoose");
 
-const MONGODB_URI =
-    process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/dormhub_db";
-
 async function connectDB() {
-    try {
-        await mongoose.connect(MONGODB_URI);
-        console.log("MongoDB Connected...");
-    } catch (err) {
-        console.log("Database Error:", err);
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+        throw new Error("MONGODB_URI is required to start the server");
     }
+
+    await mongoose.connect(uri);
+    console.log("MongoDB connected");
 }
 
-module.exports = { connectDB, mongoose, MONGODB_URI };
+module.exports = connectDB;

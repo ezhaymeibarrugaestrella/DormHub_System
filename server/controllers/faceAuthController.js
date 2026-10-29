@@ -3,69 +3,57 @@ const User = require("../models/User");
 
 exports.getStatus = async (req, res) => {
     try {
-        const count = await FaceDescriptor.countDocuments({ user_id: req.user.id });
-        res.json({ registered: count > 0, face_registered: count > 0 });
+        const registered = Boolean(await FaceDescriptor.exists({ user_id: req.user.id }));
+        res.json({ registered, face_registered: registered });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };
 
 exports.register = async (req, res) => {
+    const userId = req.user.id;
+    const { descriptor } = req.body;
+
+    if (!descriptor || !Array.isArray(descriptor) || descriptor.length === 0) {
+        return res.status(400).json({ message: "Valid face descriptor is required" });
+    }
+
     try {
-        const userId = req.user.id;
-        const { descriptor } = req.body;
-
-        if (!descriptor || !Array.isArray(descriptor) || descriptor.length === 0) {
-            return res.status(400).json({ message: "Valid face descriptor is required" });
-        }
-
-        const descriptorJson = JSON.stringify(descriptor);
-
-        const existing = await FaceDescriptor.findOne({ user_id: userId });
-
-        if (existing) {
-            existing.descriptor = descriptorJson;
-            await existing.save();
-            return res.json({ message: "Face descriptor updated successfully" });
-        }
-
-        await FaceDescriptor.create({ user_id: userId, descriptor: descriptorJson });
+        const existing = await FaceDescriptor.exists({ user_id: userId });
+        await FaceDescriptor.findOneAndUpdate(
+            { user_id: userId },
+            { descriptor: JSON.stringify(descriptor) },
+            { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+        );
         await User.findByIdAndUpdate(userId, { fingerprint_registered: true });
-
-        res.json({ message: "Face registered successfully" });
+        res.json({ message: existing ? "Face descriptor updated successfully" : "Face registered successfully" });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };
 
 exports.verify = async (req, res) => {
+    const userId = req.user.id;
+    const { descriptor } = req.body;
+
+    if (!descriptor || !Array.isArray(descriptor) || descriptor.length === 0) {
+        return res.status(400).json({ message: "Valid face descriptor is required" });
+    }
+
     try {
-        const userId = req.user.id;
-        const { descriptor } = req.body;
-
-        if (!descriptor || !Array.isArray(descriptor) || descriptor.length === 0) {
-            return res.status(400).json({ message: "Valid face descriptor is required" });
-        }
-
-        const record = await FaceDescriptor.findOne({ user_id: userId });
-
-        if (!record) {
+        const stored = await FaceDescriptor.findOne({ user_id: userId });
+        if (!stored) {
             return res.status(400).json({ message: "No face registered. Please register your face first.", verified: false });
         }
 
-        const storedDescriptor = JSON.parse(record.descriptor);
-
+        const storedDescriptor = JSON.parse(stored.descriptor);
         const distance = computeEuclideanDistance(descriptor, storedDescriptor);
         const threshold = parseFloat(process.env.FACE_MATCH_THRESHOLD || "0.5");
         const verified = distance < threshold;
-
-        if (verified) {
-            res.json({ message: "Face verified successfully", verified: true, distance });
-        } else {
-            res.status(401).json({ message: "Face does not match", verified: false, distance });
-        }
+        if (verified) return res.json({ message: "Face verified successfully", verified: true, distance });
+        res.status(401).json({ message: "Face does not match", verified: false, distance });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };
 

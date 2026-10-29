@@ -14,9 +14,9 @@ import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import StudentRegistration from "./pages/StudentRegistration";
 import StudentDashboard from "./pages/StudentDashboard";
-import StudentDemerits from "./pages/StudentDemerits";
 import GateRequestManagement from "./pages/GateRequestManagement";
 import StudentApprovals from "./pages/StudentApprovals";
+import VerifyEmail from "./pages/VerifyEmail";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import "./styles.css";
@@ -51,16 +51,6 @@ function App() {
                     element={
                         <ProtectedRoute>
                             <StudentDashboard />
-                        </ProtectedRoute>
-                    }
-                />
-
-                {/* STUDENT DEMERITS */}
-                <Route
-                    path="/student-demerits"
-                    element={
-                        <ProtectedRoute>
-                            <StudentDemerits />
                         </ProtectedRoute>
                     }
                 />

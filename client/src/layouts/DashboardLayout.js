@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import Sidebar, { EXPANDED, COLLAPSED_DARK, COLLAPSED_LIGHT, EXPANDED_WIDTH, COLLAPSED_WIDTH } from "../components/Sidebar";
 import {
     FaUserShield,
     FaUserGraduate,
     FaDoorOpen,
     FaSun,
-    FaMoon,
-    FaSignOutAlt
+    FaMoon
 } from "react-icons/fa";
 
 function DashboardLayout({ children }) {
@@ -20,7 +18,6 @@ function DashboardLayout({ children }) {
     });
     const [mobileOpen, setMobileOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-    const navigate = useNavigate();
 
     useEffect(() => {
         const userData = JSON.parse(localStorage.getItem("user") || "{}");
@@ -45,7 +42,7 @@ function DashboardLayout({ children }) {
 
     const isAdmin = user.role === "superadmin" || user.role === "staff";
     const isExpanded = sidebarMode === EXPANDED;
-    const sidebarWidth = isAdmin ? (isExpanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH) : 0;
+    const sidebarWidth = isExpanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
     const isDark = theme === "dark";
 
     const handleToggle = () => {
@@ -60,12 +57,6 @@ function DashboardLayout({ children }) {
         }
     };
 
-    const logout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        navigate("/");
-    };
-
     const contentBg = isDark ? "#1a1d21" : "#f4f6f9";
     const cardBg = isDark ? "#2c2f33" : "#ffffff";
     const textColor = isDark ? "#e9ecef" : "#212529";
@@ -73,22 +64,20 @@ function DashboardLayout({ children }) {
 
     return (
         <div className="d-flex" data-bs-theme={isDark ? "dark" : "light"}>
-            {isAdmin && (
-                <Sidebar
-                    mode={sidebarMode}
-                    theme={theme}
-                    onToggle={handleToggle}
-                    mobileOpen={mobileOpen}
-                />
-            )}
+            <Sidebar
+                mode={sidebarMode}
+                theme={theme}
+                onToggle={handleToggle}
+                mobileOpen={mobileOpen}
+            />
 
             <div style={{
-                marginLeft: isAdmin ? (isMobile ? 0 : sidebarWidth) : 0,
+                marginLeft: isMobile ? 0 : sidebarWidth,
                 width: "100%",
                 background: contentBg,
                 color: textColor,
                 minHeight: "100vh",
-                padding: isMobile && isAdmin ? "60px 12px 12px" : "20px",
+                padding: isMobile ? "60px 12px 12px" : "20px",
                 transition: "margin-left 0.25s ease, background 0.25s ease"
             }}>
                 <div className="card border-0 shadow-sm mb-4" style={{ background: cardBg }}>
@@ -101,7 +90,7 @@ function DashboardLayout({ children }) {
                                 }
                             </div>
                             <div>
-                                <h5 className="mb-0 fw-bold" style={{ fontSize: isAdmin && isExpanded && !isMobile ? "1.25rem" : "1rem", color: textColor }}>
+                                <h5 className="mb-0 fw-bold" style={{ fontSize: isExpanded && !isMobile ? "1.25rem" : "1rem", color: textColor }}>
                                     {isAdmin ? "DormHub Management System" : "Student Portal"}
                                 </h5>
                                 <small style={{ color: mutedColor }}>
@@ -123,32 +112,16 @@ function DashboardLayout({ children }) {
                                 {isDark ? <FaSun /> : <FaMoon />}
                             </button>
 
-                            {!isAdmin && (
-                                <button onClick={logout}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "6px",
-                                        height: "36px", padding: "0 12px", borderRadius: "8px",
-                                        border: "none", background: "#dc3545", color: "#fff",
-                                        cursor: "pointer", fontSize: "14px", fontWeight: 600
-                                    }}
-                                    title="Logout">
-                                    <FaSignOutAlt size={14} />
-                                    <span>Logout</span>
-                                </button>
-                            )}
-
                             {user.fingerprint_registered && (
                                 <span className="badge bg-success bg-opacity-10 text-success d-flex align-items-center gap-1 px-3 py-2">
                                     <FaDoorOpen />
                                     Biometric Active
                                 </span>
-                                
                             )}
                             <div className="text-end d-none d-sm-block">
                                 <div className="fw-semibold small" style={{ color: textColor }}>
                                     {user.fullname || (isAdmin ? "Super Admin" : "Student")}
                                 </div>
-                                
                                 <small style={{ color: mutedColor }} className="text-capitalize">
                                     {user.role || "user"}
                                 </small>

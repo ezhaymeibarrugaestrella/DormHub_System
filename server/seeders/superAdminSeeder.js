@@ -1,47 +1,38 @@
-require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const mongoose = require("mongoose");
+const connectDB = require("../config/db");
 const User = require("../models/User");
 
-const SUPER_ADMIN_EMAIL = "superadmin@dormhub.com";
-const SUPER_ADMIN_PASSWORD = "admin123";
-
-async function ensureSuperAdmin() {
-    const existing = await User.findOne({ email: SUPER_ADMIN_EMAIL });
-
-    if (existing) {
-        return { created: false, message: "Super Admin already exists" };
+async function createSuperAdmin() {
+    const email = process.env.SUPERADMIN_EMAIL;
+    const password = process.env.SUPERADMIN_PASSWORD;
+    if (!email || !password) {
+        throw new Error("Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD to run this one-time seeder");
     }
 
-    const hashedPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
+    await connectDB();
+    const existing = await User.findOne({ email });
+    if (existing) {
+        console.log("Super admin already exists");
+        return;
+    }
 
     await User.create({
         student_id: "SUPER-ADMIN-001",
         fullname: "DormHub Super Admin",
-        email: SUPER_ADMIN_EMAIL,
-        password: hashedPassword,
+        email,
+        password: await bcrypt.hash(password, 10),
         role: "superadmin",
         status: "active"
     });
-
-    return { created: true, message: "Super Admin Created Successfully" };
+    console.log("Super admin created");
 }
 
-async function createSuperAdmin() {
-    await mongoose.connect(
-        process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/dormhub_db"
-    );
-
-    const result = await ensureSuperAdmin();
-    console.log(result.message);
-    process.exit(0);
-}
-
-if (require.main === module) {
-    createSuperAdmin().catch((err) => {
-        console.error(err);
-        process.exit(1);
+createSuperAdmin()
+    .catch((error) => {
+        console.error("Super admin seeding failed:", error.message);
+        process.exitCode = 1;
+    })
+    .finally(async () => {
+        const mongoose = require("mongoose");
+        if (mongoose.connection.readyState) await mongoose.disconnect();
     });
-}
-
-module.exports = { ensureSuperAdmin };

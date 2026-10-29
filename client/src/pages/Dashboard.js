@@ -230,7 +230,7 @@ function Dashboard() {
                                 <div className="d-flex align-items-center justify-content-between">
                                     <div className="d-flex align-items-center gap-3">
                                         <div className="bg-dark bg-opacity-10 p-3 rounded-circle">
-                                            <FaMoon size={20} className="text-warning" />
+                                            <FaMoon size={20} className="text-dark" />
                                         </div>
                                         <div>
                                             <h6 className="fw-bold mb-0">Nightly Attendance Monitoring</h6>

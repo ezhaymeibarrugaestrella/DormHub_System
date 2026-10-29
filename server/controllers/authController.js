@@ -1,6 +1,6 @@
-const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 exports.register = async (req, res) => {
     try {
@@ -8,71 +8,41 @@ exports.register = async (req, res) => {
             student_id,
             fullname,
             email,
-            password,
-            role
+            password
         } = req.body;
+
+        if (!password || password.length < 6) {
+            return res
+                .status(400)
+                .json({ message: "Password must be at least 6 characters" });
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = await User.create({
-            student_id: student_id || null,
-            fullname,
-            email,
-            password: hashedPassword,
-            role: role || "student"
-        });
-
-        res.status(201).json({
-            message: "User Registered Successfully",
-            id: user.id
-        });
+        const user = await User.create({ student_id, fullname, email, password: hashedPassword, role });
+        res.status(201).json({ message: "User Registered Successfully", id: user.id });
     } catch (error) {
-        if (error.code === 11000) {
-            return res.status(409).json({ message: "Email or Student ID already exists" });
-        }
-        res.status(500).json(error);
+        res.status(error.code === 11000 ? 409 : 500).json({ message: error.message });
     }
 };
 
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
-
         const user = await User.findOne({ email });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
+        if (!user) return res.status(404).json({ message: "User not found" });
 
         const validPassword = await bcrypt.compare(password, user.password);
-
-        if (!validPassword) {
-            return res.status(401).json({ message: "Invalid password" });
-        }
+        if (!validPassword) return res.status(401).json({ message: "Invalid password" });
 
         if (user.registration_status === "pending") {
-            return res.status(403).json({
-                message: "Your registration is pending approval from the landlady. Please wait for confirmation."
-            });
+            return res.status(403).json({ message: "Your registration is pending approval from the landlady. Please wait for confirmation." });
         }
-
         if (user.registration_status === "rejected") {
-            return res.status(403).json({
-                message: "Your registration was rejected. Please contact the landlady for more information."
-            });
+            return res.status(403).json({ message: "Your registration was rejected. Please contact the landlady for more information." });
         }
 
-        const token = jwt.sign(
-            {
-                id: user.id,
-                role: user.role
-            },
-            process.env.JWT_SECRET,
-            {
-                expiresIn: "1d"
-            }
-        );
-
+        const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1d" });
         res.status(200).json({
             message: "Login Successful",
             token,
@@ -86,6 +56,6 @@ exports.login = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message });
     }
 };

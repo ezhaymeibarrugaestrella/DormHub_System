@@ -28,12 +28,6 @@ import {
     platformAuthenticatorIsAvailable
 } from "@simplewebauthn/browser";
 
-const FULLNAME_RE = /^[A-Za-z\u00C0-\u017F]+(?:[ .'-][A-Za-z\u00C0-\u017F]+)+\.?$/;
-const STUDENT_ID_RE = /^[A-Za-z0-9-]{5,20}$/;
-const ROOM_RE = /^[A-Za-z0-9-]{1,10}$/;
-const PHONE_RE = /^09\d{9}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 function StudentRegistration() {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({
@@ -49,7 +43,6 @@ function StudentRegistration() {
         parentContact: "",
         parentAddress: ""
     });
-    const [errors, setErrors] = useState({});
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [registeringFace, setRegisteringFace] = useState(false);
@@ -59,6 +52,7 @@ function StudentRegistration() {
     const [platformAuthAvailable, setPlatformAuthAvailable] = useState(false);
     const [bioLoading, setBioLoading] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
+    const [verification, setVerification] = useState(null);
     const getApiUrl = () => process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000`;
 
     useEffect(() => {
@@ -78,125 +72,22 @@ function StudentRegistration() {
     }, []);
 
     const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData({ ...formData, [name]: value });
-        if (errors[name]) {
-            setErrors((prev) => ({ ...prev, [name]: "" }));
-        }
+        setFormData({ ...formData, [e.target.name]: e.target.value });
     };
-
-    const validateField = (name, value) => {
-        const v = (value || "").trim();
-
-        switch (name) {
-            case "fullname":
-                if (!v) return "Full name is required";
-                if (!FULLNAME_RE.test(v)) {
-                    return "Full name must only contain letters, spaces, hyphens, and apostrophes (e.g. Juan Dela Cruz)";
-                }
-                return "";
-            case "parentName":
-                if (!v) return "Parent/guardian name is required";
-                if (!FULLNAME_RE.test(v)) {
-                    return "Name must only contain letters, spaces, hyphens, and apostrophes";
-                }
-                return "";
-            case "studentId":
-                if (!v) return "Student ID is required";
-                if (!STUDENT_ID_RE.test(v)) {
-                    return "Student ID must be 5-20 characters using letters, numbers, and hyphens only";
-                }
-                return "";
-            case "roomNumber":
-                if (v && !ROOM_RE.test(v)) {
-                    return "Room number can only contain letters, numbers, and hyphens";
-                }
-                return "";
-            case "program":
-                if (!v) return "Please select your program";
-                return "";
-            case "yearLevel":
-                if (!v) return "Please select your year level";
-                return "";
-            case "address":
-                if (!v) return "Address is required";
-                if (v.length < 5) return "Please enter a complete address (min 5 characters)";
-                return "";
-            case "parentAddress":
-                if (!v) return "Parent/guardian address is required";
-                if (v.length < 5) return "Please enter a complete address (min 5 characters)";
-                return "";
-            case "parentContact":
-                if (!v) return "Parent/guardian contact number is required";
-                if (!PHONE_RE.test(v)) {
-                    return "Enter a valid 11-digit mobile number starting with 09 (e.g. 09817272189)";
-                }
-                return "";
-            case "email":
-                if (!v) return "Email address is required";
-                if (!EMAIL_RE.test(v)) return "Enter a valid email address (e.g. name@example.com)";
-                return "";
-            case "password":
-                if (!v) return "Password is required";
-                if (v.length < 6) return "Password must be at least 6 characters";
-                return "";
-            default:
-                return "";
-        }
-    };
-
-    const validateFields = (names) => {
-        const errs = {};
-        names.forEach((name) => {
-            const msg = validateField(name, formData[name]);
-            if (msg) errs[name] = msg;
-        });
-        setErrors(errs);
-        return Object.keys(errs).length === 0;
-    };
-
-    const STEP_1_FIELDS = ["fullname", "studentId", "program", "yearLevel", "roomNumber", "address"];
-    const STEP_2_FIELDS = ["parentName", "parentContact", "parentAddress"];
-    const STEP_3_FIELDS = [
-        "fullname", "studentId", "program", "yearLevel", "roomNumber", "address",
-        "parentName", "parentContact", "parentAddress", "email", "password"
-    ];
 
     const handleNext = (e) => {
         e.preventDefault();
-        const valid = step === 1
-            ? validateFields(STEP_1_FIELDS)
-            : validateFields(STEP_2_FIELDS);
-
-        if (!valid) {
-            setMessage({
-                type: "danger",
-                text: "Please correct the highlighted fields before continuing."
-            });
-            return;
-        }
-
         setMessage({ type: "", text: "" });
         setStep(step + 1);
     };
 
     const handleBack = () => {
         setMessage({ type: "", text: "" });
-        setErrors({});
         setStep(step - 1);
     };
 
     const handleCreateAccount = async (e) => {
         e.preventDefault();
-
-        if (!validateFields(STEP_3_FIELDS)) {
-            setMessage({
-                type: "danger",
-                text: "Please correct the highlighted fields before creating your account."
-            });
-            return;
-        }
-
         setLoading(true);
         setMessage({ type: "", text: "" });
 
@@ -218,6 +109,16 @@ function StudentRegistration() {
 
             localStorage.setItem("token", res.data.token);
             localStorage.setItem("user", JSON.stringify(res.data.user));
+
+            if (res.data.verification) {
+                setVerification(res.data.verification);
+                localStorage.setItem("pendingVerificationEmail", formData.email);
+                if (res.data.verification.dev_link) {
+                    localStorage.setItem("pendingVerificationDevLink", res.data.verification.dev_link);
+                } else {
+                    localStorage.removeItem("pendingVerificationDevLink");
+                }
+            }
 
             setMessage({ type: "success", text: "Account created! Now register your face." });
             setStep(4);
@@ -306,12 +207,6 @@ function StudentRegistration() {
         }
     };
 
-    const fieldClass = (name) =>
-        `form-control${errors[name] ? " is-invalid" : ""}`;
-
-    const renderError = (name) =>
-        errors[name] ? <div className="invalid-feedback">{errors[name]}</div> : null;
-
     return (
         <div
             className="d-flex align-items-start justify-content-center py-3 py-sm-4 py-md-5 px-2 px-sm-3"
@@ -357,7 +252,7 @@ function StudentRegistration() {
                         </div>
 
                         {step === 1 && (
-                            <form onSubmit={handleNext} noValidate>
+                            <form onSubmit={handleNext}>
                                 <h6 className="fw-bold text-primary mb-2 mb-md-3">
                                     <FaUser className="me-2" />Student Information
                                 </h6>
@@ -366,66 +261,58 @@ function StudentRegistration() {
                                         <label className="form-label fw-semibold small">Full Name</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaUser size={12} /></span>
-                                            <input type="text" name="fullname" className={fieldClass("fullname")}
+                                            <input type="text" name="fullname" className="form-control"
                                                 placeholder="Enter full name" value={formData.fullname}
-                                                onChange={handleChange} />
+                                                onChange={handleChange} required />
                                         </div>
-                                        {renderError("fullname")}
                                     </div>
                                     <div className="col-12 col-md-6">
                                         <label className="form-label fw-semibold small">Student ID Number</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaIdCard size={12} /></span>
-                                            <input type="text" name="studentId" className={fieldClass("studentId")}
+                                            <input type="text" name="studentId" className="form-control"
                                                 placeholder="Enter student ID" value={formData.studentId}
-                                                onChange={handleChange} />
+                                                onChange={handleChange} required />
                                         </div>
-                                        {renderError("studentId")}
                                     </div>
                                     <div className="col-12 col-md-6">
                                         <label className="form-label fw-semibold small">Program</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaGraduationCap size={12} /></span>
-                                            <select name="program" className={`form-select${errors.program ? " is-invalid" : ""}`}
-                                                value={formData.program} onChange={handleChange}>
+                                            <select name="program" className="form-select" value={formData.program} onChange={handleChange} required>
                                                 <option value="">Select Program</option>
                                                 <option>BSIT</option><option>BSCS</option><option>BSED</option>
                                                 <option>BSBA</option><option>BSHM</option>
                                             </select>
                                         </div>
-                                        {renderError("program")}
                                     </div>
                                     <div className="col-12 col-md-6">
                                         <label className="form-label fw-semibold small">Year Level</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaLayerGroup size={12} /></span>
-                                            <select name="yearLevel" className={`form-select${errors.yearLevel ? " is-invalid" : ""}`}
-                                                value={formData.yearLevel} onChange={handleChange}>
+                                            <select name="yearLevel" className="form-select" value={formData.yearLevel} onChange={handleChange} required>
                                                 <option value="">Select Year Level</option>
                                                 <option>1st Year</option><option>2nd Year</option>
                                                 <option>3rd Year</option><option>4th Year</option>
                                             </select>
                                         </div>
-                                        {renderError("yearLevel")}
                                     </div>
                                     <div className="col-12 col-md-6">
                                         <label className="form-label fw-semibold small"><FaHome className="me-1" /> Room Number</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaHome size={12} /></span>
-                                            <input type="text" name="roomNumber" className={fieldClass("roomNumber")}
+                                            <input type="text" name="roomNumber" className="form-control"
                                                 placeholder="e.g. 201, 3B" value={formData.roomNumber}
                                                 onChange={handleChange} />
                                         </div>
-                                        {renderError("roomNumber")}
                                     </div>
                                     <div className="col-12">
                                         <label className="form-label fw-semibold small"><FaMapMarkerAlt className="me-1 text-muted" /> Address</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaHome size={12} /></span>
-                                            <textarea name="address" className={fieldClass("address")} placeholder="Enter your complete address"
-                                                value={formData.address} onChange={handleChange} rows="2" />
+                                            <textarea name="address" className="form-control" placeholder="Enter your complete address"
+                                                value={formData.address} onChange={handleChange} rows="2" required />
                                         </div>
-                                        {renderError("address")}
                                     </div>
                                 </div>
 
@@ -442,7 +329,7 @@ function StudentRegistration() {
                         )}
 
                         {step === 2 && (
-                            <form onSubmit={handleNext} noValidate>
+                            <form onSubmit={handleNext}>
                                 <h6 className="fw-bold text-primary mb-2 mb-md-3">
                                     <FaUserTie className="me-2" />Parent / Guardian Information
                                 </h6>
@@ -451,30 +338,27 @@ function StudentRegistration() {
                                         <label className="form-label fw-semibold small">Parent/Guardian Name</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaUserTie size={12} /></span>
-                                            <input type="text" name="parentName" className={fieldClass("parentName")}
+                                            <input type="text" name="parentName" className="form-control"
                                                 placeholder="Enter parent/guardian name" value={formData.parentName}
-                                                onChange={handleChange} />
+                                                onChange={handleChange} required />
                                         </div>
-                                        {renderError("parentName")}
                                     </div>
                                     <div className="col-12 col-md-6">
                                         <label className="form-label fw-semibold small">Parent/Guardian Contact No.</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaPhone size={12} /></span>
-                                            <input type="text" name="parentContact" className={fieldClass("parentContact")}
+                                            <input type="text" name="parentContact" className="form-control"
                                                 placeholder="Enter contact number" value={formData.parentContact}
-                                                onChange={handleChange} />
+                                                onChange={handleChange} required />
                                         </div>
-                                        {renderError("parentContact")}
                                     </div>
                                     <div className="col-12">
                                         <label className="form-label fw-semibold small"><FaMapMarkerAlt className="me-1 text-muted" /> Parent/Guardian Address</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaMapMarkerAlt size={12} /></span>
-                                            <textarea name="parentAddress" className={fieldClass("parentAddress")} placeholder="Enter parent/guardian address"
-                                                value={formData.parentAddress} onChange={handleChange} rows="2" />
+                                            <textarea name="parentAddress" className="form-control" placeholder="Enter parent/guardian address"
+                                                value={formData.parentAddress} onChange={handleChange} rows="2" required />
                                         </div>
-                                        {renderError("parentAddress")}
                                     </div>
                                 </div>
 
@@ -495,7 +379,7 @@ function StudentRegistration() {
                         )}
 
                         {step === 3 && (
-                            <form onSubmit={handleCreateAccount} noValidate>
+                            <form onSubmit={handleCreateAccount}>
                                 <h6 className="fw-bold text-primary mb-2 mb-md-3">
                                     <FaEnvelope className="me-2" />Account Credentials
                                 </h6>
@@ -504,21 +388,19 @@ function StudentRegistration() {
                                         <label className="form-label fw-semibold small">Email Address</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaEnvelope size={12} /></span>
-                                            <input type="email" name="email" className={fieldClass("email")}
+                                            <input type="email" name="email" className="form-control"
                                                 placeholder="Enter email" value={formData.email}
-                                                onChange={handleChange} />
+                                                onChange={handleChange} required />
                                         </div>
-                                        {renderError("email")}
                                     </div>
                                     <div className="col-12 col-md-6">
                                         <label className="form-label fw-semibold small">Password</label>
                                         <div className="input-group input-group-sm">
                                             <span className="input-group-text"><FaLock size={12} /></span>
-                                            <input type="password" name="password" className={fieldClass("password")}
+                                            <input type="password" name="password" className="form-control"
                                                 placeholder="Create password (min 6 chars)" value={formData.password}
-                                                onChange={handleChange} />
+                                                onChange={handleChange} required minLength={6} />
                                         </div>
-                                        {renderError("password")}
                                     </div>
                                 </div>
 
@@ -547,6 +429,19 @@ function StudentRegistration() {
 
                         {step === 4 && (
                             <div className="text-center py-3 py-md-4">
+                                {verification && (
+                                    <div className="alert alert-warning py-2 small text-start mx-auto mb-3" style={{ maxWidth: "520px" }}>
+                                        <FaEnvelope className="me-1" />
+                                        Check <b>{formData.email}</b> for your email verification link. You must verify your email before signing in.
+                                        {verification.dev_link && (
+                                            <div className="mt-1">
+                                                <a href={verification.dev_link} target="_blank" rel="noreferrer">
+                                                    Open verification link (development mode)
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 {faceDone ? (
                                     <>
                                         <div className="bg-success bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"

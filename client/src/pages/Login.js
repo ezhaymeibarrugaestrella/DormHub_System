@@ -24,17 +24,51 @@ function Login() {
     const getApiUrl = () => process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000`;
 
     const registrationStatus = searchParams.get("registration");
+    const verificationStatus = searchParams.get("verification");
+    const [pendingEmail, setPendingEmail] = useState(() => localStorage.getItem("pendingVerificationEmail") || "");
+    const [pendingDevLink, setPendingDevLink] = useState(() => localStorage.getItem("pendingVerificationDevLink") || "");
+    const [needsVerification, setNeedsVerification] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [resendMessage, setResendMessage] = useState("");
+
+    const resendVerification = async (targetEmail) => {
+        if (!targetEmail) return;
+        setResending(true);
+        setResendMessage("");
+        try {
+            const res = await axios.post(`${getApiUrl()}/api/auth/resend-verification`, {
+                email: targetEmail
+            });
+            if (res.data.dev_link) {
+                setPendingDevLink(res.data.dev_link);
+                localStorage.setItem("pendingVerificationDevLink", res.data.dev_link);
+            }
+            setResendMessage(
+                res.data.message || "If that account needs verification, a new link has been sent."
+            );
+        } catch (err) {
+            setResendMessage(
+                err.response?.data?.message || "Could not resend verification email."
+            );
+        } finally {
+            setResending(false);
+        }
+    };
 
     const loginUser = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError("");
+        setNeedsVerification(false);
 
         try {
             const res = await axios.post(`${getApiUrl()}/api/auth/login`, { email, password });
 
             localStorage.setItem("token", res.data.token);
             localStorage.setItem("user", JSON.stringify(res.data.user));
+
+            localStorage.removeItem("pendingVerificationEmail");
+            localStorage.removeItem("pendingVerificationDevLink");
 
             const user = res.data.user;
 
@@ -52,9 +86,15 @@ function Login() {
                 window.location.href = "/dashboard";
             }
         } catch (error) {
+            const data = error.response?.data;
             setError(
-                error.response?.data?.message || "Login Failed. Please check your credentials."
+                data?.message || "Login Failed. Please check your credentials."
             );
+            if (data?.requires_verification) {
+                setPendingEmail(email);
+                setNeedsVerification(true);
+                localStorage.setItem("pendingVerificationEmail", email);
+            }
         } finally {
             setLoading(false);
         }
@@ -108,6 +148,47 @@ function Login() {
                         <div className="alert alert-success d-flex align-items-center gap-2 py-2 small">
                             <FaCheckCircle className="flex-shrink-0" />
                             <div>Your registration has been approved! You can now sign in.</div>
+                        </div>
+                    )}
+
+                    {verificationStatus === "verified" && (
+                        <div className="alert alert-success d-flex align-items-center gap-2 py-2 small">
+                            <FaCheckCircle className="flex-shrink-0" />
+                            <div>Your email has been verified. You can now sign in.</div>
+                        </div>
+                    )}
+
+                    {pendingEmail && needsVerification && (
+                        <div className="alert alert-warning py-2 small">
+                            <div className="d-flex align-items-start gap-2">
+                                <FaEnvelope className="flex-shrink-0 mt-1" />
+                                <div>
+                                    Your email <b>{pendingEmail}</b> has not been verified yet.
+                                    <div className="mt-2 d-flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            className="btn btn-outline-warning btn-sm"
+                                            onClick={() => resendVerification(pendingEmail)}
+                                            disabled={resending}
+                                        >
+                                            {resending ? "Sending…" : "Resend verification email"}
+                                        </button>
+                                        {pendingDevLink && (
+                                            <a
+                                                href={pendingDevLink}
+                                                className="btn btn-warning btn-sm"
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                Open verification link
+                                            </a>
+                                        )}
+                                    </div>
+                                    {resendMessage && (
+                                        <div className="text-muted mt-2">{resendMessage}</div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     )}
 
