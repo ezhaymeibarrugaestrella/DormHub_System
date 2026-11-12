@@ -11,6 +11,7 @@ import {
     FaExclamationTriangle,
     FaShieldAlt,
     FaHistory,
+    FaClipboardList,
     FaPaperPlane,
     FaUser,
     FaMapPin,
@@ -19,8 +20,7 @@ import {
     FaCrosshairs,
     FaMapMarkedAlt,
     FaCamera,
-    FaFingerprint,
-    FaMoon
+    FaFingerprint
 } from "react-icons/fa";
 import FaceCamera from "../components/FaceCamera";
 import {
@@ -35,6 +35,9 @@ function StudentDashboard() {
     const [fingerprintRegistered, setFingerprintRegistered] = useState(false);
     const [webauthnSupported, setWebauthnSupported] = useState(false);
     const [requests, setRequests] = useState([]);
+    const [demerits, setDemerits] = useState([]);
+    const [demeritsLoading, setDemeritsLoading] = useState(true);
+    const [demeritsError, setDemeritsError] = useState("");
     const [requestType, setRequestType] = useState("out");
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
@@ -43,9 +46,6 @@ function StudentDashboard() {
     const [showMap, setShowMap] = useState(null);
     const [showFaceModal, setShowFaceModal] = useState(null);
     const [bioMethod, setBioMethod] = useState(null); // 'face' or 'fingerprint' for gate pass
-    const [nightlyCheckedIn, setNightlyCheckedIn] = useState(false);
-    const [nightlyCheckedAt, setNightlyCheckedAt] = useState(null);
-    const [nightlyLoading, setNightlyLoading] = useState(false);
 
     useEffect(() => {
         const userData = JSON.parse(localStorage.getItem("user") || "{}");
@@ -53,8 +53,8 @@ function StudentDashboard() {
         fetchStatus();
         fetchWebAuthnStatus();
         fetchRequests();
+        fetchDemerits();
         checkWebAuthnSupport();
-        fetchNightlyStatus();
     }, []);
 
     const checkWebAuthnSupport = async () => {
@@ -63,45 +63,6 @@ function StudentDashboard() {
             setWebauthnSupported(supported);
         } catch {
             setWebauthnSupported(false);
-        }
-    };
-
-    const fetchNightlyStatus = async () => {
-        try {
-            const res = await API.get("/attendance/nightly/status");
-            setNightlyCheckedIn(res.data.checkedIn);
-            setNightlyCheckedAt(res.data.checkedAt);
-        } catch (err) {
-            console.log(err);
-        }
-    };
-
-    const handleNightlyCheckIn = async () => {
-        setNightlyLoading(true);
-        let lat = null, lng = null;
-
-        try {
-            if (navigator.geolocation) {
-                const pos = await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        enableHighAccuracy: true,
-                        timeout: 10000
-                    });
-                });
-                lat = pos.coords.latitude;
-                lng = pos.coords.longitude;
-            }
-        } catch { }
-
-        try {
-            await API.post("/attendance/nightly/checkin", { locationLat: lat, locationLng: lng });
-            setNightlyCheckedIn(true);
-            setNightlyCheckedAt(new Date().toISOString());
-            showMessage("success", "Nightly check-in successful!");
-        } catch (err) {
-            showMessage("danger", err.response?.data?.message || "Check-in failed");
-        } finally {
-            setNightlyLoading(false);
         }
     };
 
@@ -129,6 +90,18 @@ function StudentDashboard() {
             setRequests(res.data);
         } catch (err) {
             console.log(err);
+        }
+    };
+
+    const fetchDemerits = async () => {
+        try {
+            const res = await API.get("/demerits/my");
+            setDemerits(res.data);
+        } catch (err) {
+            console.log(err);
+            setDemeritsError(err.response?.data?.message || "Unable to load your demerit history.");
+        } finally {
+            setDemeritsLoading(false);
         }
     };
 
@@ -466,60 +439,6 @@ function StudentDashboard() {
                     </div>
                 </div>
 
-                <div className="row g-3 mb-4">
-                    <div className="col-12">
-                        <div className="card border-0 shadow-sm stat-card">
-                            <div className="card-body p-3 p-md-4">
-                                <div className="d-flex align-items-center gap-3 mb-3">
-                                    <div className="bg-dark bg-opacity-10 p-3 rounded-circle">
-                                        <FaMoon size={20} className="text-dark" />
-                                    </div>
-                                    <div>
-                                        <h6 className="fw-bold mb-0">Nightly Check-in</h6>
-                                        <small className="text-muted">Confirm your presence for tonight</small>
-                                    </div>
-                                </div>
-                                <div className="d-flex align-items-center justify-content-between p-3 bg-light rounded">
-                                    <div className="d-flex align-items-center gap-3">
-                                        {nightlyCheckedIn ? (
-                                            <>
-                                                <FaCheckCircle size={28} className="text-success" />
-                                                <div>
-                                                    <p className="fw-bold text-success mb-0">Checked In</p>
-                                                    <small className="text-muted">
-                                                        {nightlyCheckedAt ? new Date(nightlyCheckedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
-                                                    </small>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FaHourglassHalf size={28} className="text-warning" />
-                                                <div>
-                                                    <p className="fw-bold mb-0 text-warning">Not Yet Checked In</p>
-                                                    <small className="text-muted">Tap the button to check in for tonight</small>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                    <button
-                                        className={`btn ${nightlyCheckedIn ? "btn-outline-success" : "btn-dark"} px-4 fw-semibold`}
-                                        onClick={handleNightlyCheckIn}
-                                        disabled={nightlyCheckedIn || nightlyLoading}
-                                    >
-                                        {nightlyLoading ? (
-                                            <span className="spinner-border spinner-border-sm" />
-                                        ) : nightlyCheckedIn ? (
-                                            <>Checked</>
-                                        ) : (
-                                            <>Check In</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <div className="card border-0 shadow-sm">
                     <div className="card-body p-3 p-md-4">
                         <div className="d-flex align-items-center gap-3 mb-3">
@@ -589,6 +508,60 @@ function StudentDashboard() {
                                                     )}
                                                 </td>
                                                 <td className="small">{req.remarks || <span className="text-muted">—</span>}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card border-0 shadow-sm mt-4">
+                    <div className="card-body p-3 p-md-4">
+                        <div className="d-flex align-items-center gap-3 mb-3">
+                            <div className="bg-danger bg-opacity-10 p-3 rounded-circle">
+                                <FaClipboardList size={20} className="text-danger" />
+                            </div>
+                            <div>
+                                <h6 className="fw-bold mb-0">My Demerit History</h6>
+                                <small className="text-muted">View your recorded violations and points</small>
+                            </div>
+                        </div>
+
+                        {demeritsLoading ? (
+                            <div className="text-center py-4">
+                                <span className="spinner-border spinner-border-sm" role="status" />
+                                <p className="text-muted small mt-2 mb-0">Loading demerit history...</p>
+                            </div>
+                        ) : demeritsError ? (
+                            <div className="alert alert-danger mb-0" role="alert">
+                                <FaExclamationTriangle className="me-2" />
+                                {demeritsError}
+                            </div>
+                        ) : demerits.length === 0 ? (
+                            <div className="text-center py-4">
+                                <FaShieldAlt size={36} className="text-success mb-2" />
+                                <p className="text-muted mb-0">You have no recorded demerits.</p>
+                            </div>
+                        ) : (
+                            <div className="table-responsive">
+                                <table className="table table-hover align-middle mb-0 small">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Violation</th>
+                                            <th>Points</th>
+                                            <th>Remarks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {demerits.map((demerit) => (
+                                            <tr key={demerit.id}>
+                                                <td className="text-nowrap">{formatDate(demerit.created_at)}</td>
+                                                <td>{demerit.violation}</td>
+                                                <td><span className="badge bg-danger">{demerit.points}</span></td>
+                                                <td>{demerit.remarks || <span className="text-muted">—</span>}</td>
                                             </tr>
                                         ))}
                                     </tbody>

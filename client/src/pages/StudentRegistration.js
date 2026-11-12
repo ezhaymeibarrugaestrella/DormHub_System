@@ -280,8 +280,39 @@ function StudentRegistration() {
                                             <span className="input-group-text"><FaGraduationCap size={12} /></span>
                                             <select name="program" className="form-select" value={formData.program} onChange={handleChange} required>
                                                 <option value="">Select Program</option>
-                                                <option>BSIT</option><option>BSCS</option><option>BSED</option>
-                                                <option>BSBA</option><option>BSHM</option>
+                                                <option>BSA</option>
+                                                <option>BSAB</option>
+                                                <option>BSAF</option>
+                                                <option>BSES</option>
+                                                <option>BSCS</option>
+                                                <option>BSIS</option>
+                                                <option>AB Econ</option>
+                                                <option>BS Entrep</option>
+                                                <option>BPA</option>
+                                                <option>BSABE</option>
+                                                <option>BSChE</option>
+                                                <option>BSCE</option>
+                                                <option>BSEE</option>
+                                                <option>BSME</option>
+                                                <option>BSCPE</option>
+                                                <option>BEED</option>
+                                                <option>BSED Eng</option>
+                                                <option>BSED Fil</option>
+                                                <option>BSED Math</option>
+                                                <option>BSED Sci</option>
+                                                <option>BSED Soc. Stud</option>
+                                                <option>BECED</option>
+                                                <option>BPED</option>
+                                                <option>BTLED</option>
+                                                <option>BSIT AT</option>
+                                                <option>BSIT CCT</option>
+                                                <option>BSIT ET</option>
+                                                <option>BSIT ELT</option>
+                                                <option>BSIT FT</option>
+                                                <option>BSIT</option>
+                                                <option>BSED</option>
+                                                <option>BSBA</option>
+                                                <option>BSHM</option>
                                             </select>
                                         </div>
                                     </div>
