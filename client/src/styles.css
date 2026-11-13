@@ -92,6 +92,21 @@
   color: #adb5bd !important;
 }
 
+[data-bs-theme="light"] .nightly-checkin-icon {
+  background-color: rgba(33, 37, 41, 0.1);
+  color: #212529;
+}
+
+[data-bs-theme="dark"] .nightly-checkin-icon {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #e9ecef;
+}
+
+[data-bs-theme="dark"] .nightly-checkin-action.btn-dark {
+  background-color: #495057;
+  border-color: #6c757d;
+}
+
 [data-bs-theme="dark"] .btn-outline-primary,
 [data-bs-theme="dark"] .btn-outline-secondary,
 [data-bs-theme="dark"] .btn-outline-success,

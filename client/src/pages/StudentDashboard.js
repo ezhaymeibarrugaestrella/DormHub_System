@@ -12,6 +12,7 @@ import {
     FaShieldAlt,
     FaHistory,
     FaClipboardList,
+    FaMoon,
     FaPaperPlane,
     FaUser,
     FaMapPin,
@@ -38,6 +39,9 @@ function StudentDashboard() {
     const [demerits, setDemerits] = useState([]);
     const [demeritsLoading, setDemeritsLoading] = useState(true);
     const [demeritsError, setDemeritsError] = useState("");
+    const [nightlyCheckedIn, setNightlyCheckedIn] = useState(false);
+    const [nightlyCheckedAt, setNightlyCheckedAt] = useState(null);
+    const [nightlyLoading, setNightlyLoading] = useState(false);
     const [requestType, setRequestType] = useState("out");
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
@@ -54,6 +58,7 @@ function StudentDashboard() {
         fetchWebAuthnStatus();
         fetchRequests();
         fetchDemerits();
+        fetchNightlyStatus();
         checkWebAuthnSupport();
     }, []);
 
@@ -102,6 +107,48 @@ function StudentDashboard() {
             setDemeritsError(err.response?.data?.message || "Unable to load your demerit history.");
         } finally {
             setDemeritsLoading(false);
+        }
+    };
+
+    const fetchNightlyStatus = async () => {
+        try {
+            const res = await API.get("/attendance/nightly/status");
+            setNightlyCheckedIn(res.data.checkedIn);
+            setNightlyCheckedAt(res.data.checkedAt);
+        } catch (err) {
+            console.log(err);
+        }
+    };
+
+    const handleNightlyCheckIn = async () => {
+        setNightlyLoading(true);
+        let locationLat = null;
+        let locationLng = null;
+
+        try {
+            if (navigator.geolocation) {
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 10000
+                    });
+                });
+                locationLat = position.coords.latitude;
+                locationLng = position.coords.longitude;
+            }
+        } catch (err) {
+            console.log("Nightly check-in location unavailable:", err);
+        }
+
+        try {
+            await API.post("/attendance/nightly/checkin", { locationLat, locationLng });
+            setNightlyCheckedIn(true);
+            setNightlyCheckedAt(new Date().toISOString());
+            showMessage("success", "Nightly check-in successful!");
+        } catch (err) {
+            showMessage("danger", err.response?.data?.message || "Check-in failed");
+        } finally {
+            setNightlyLoading(false);
         }
     };
 
@@ -435,6 +482,56 @@ function StudentDashboard() {
                                     </>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card border-0 shadow-sm mb-4 nightly-checkin-card">
+                    <div className="card-body p-3 p-md-4">
+                        <div className="d-flex align-items-center gap-3 mb-3">
+                            <div className="nightly-checkin-icon p-3 rounded-circle">
+                                <FaMoon size={20} />
+                            </div>
+                            <div>
+                                <h6 className="fw-bold mb-0">Nightly Check-in</h6>
+                                <small className="text-muted">Confirm your presence for tonight</small>
+                            </div>
+                        </div>
+                        <div className="d-flex align-items-center justify-content-between gap-3 p-3 bg-light rounded">
+                            <div className="d-flex align-items-center gap-3">
+                                {nightlyCheckedIn ? (
+                                    <>
+                                        <FaCheckCircle size={28} className="text-success flex-shrink-0" />
+                                        <div>
+                                            <p className="fw-bold text-success mb-0">Checked In</p>
+                                            <small className="text-muted">
+                                                {nightlyCheckedAt ? new Date(nightlyCheckedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
+                                            </small>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FaHourglassHalf size={28} className="text-warning flex-shrink-0" />
+                                        <div>
+                                            <p className="fw-bold mb-0 text-warning">Not Yet Checked In</p>
+                                            <small className="text-muted">Tap the button to check in for tonight</small>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            <button
+                                className={`btn ${nightlyCheckedIn ? "btn-outline-success" : "btn-dark"} px-4 fw-semibold nightly-checkin-action`}
+                                onClick={handleNightlyCheckIn}
+                                disabled={nightlyCheckedIn || nightlyLoading}
+                            >
+                                {nightlyLoading ? (
+                                    <span className="spinner-border spinner-border-sm" role="status" />
+                                ) : nightlyCheckedIn ? (
+                                    "Checked"
+                                ) : (
+                                    "Check In"
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>
