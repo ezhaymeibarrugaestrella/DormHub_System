@@ -1,6 +1,1 @@
-Backend = npm run dev
-Frontend = npm start
 
-superadmin Account
-Email = superadmin@dormhub.com
-password = admin123
